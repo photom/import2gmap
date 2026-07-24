@@ -22,6 +22,7 @@ This document defines the core guidelines and operational instructions for Antig
   - **Canon TDD (`tdd-android`)**: Apply for Test Plan maintenance and the Red-Green-Refactor testing cycle.
   - **DDD Architecture (`ddd-architecture`)**: Apply when designing entities, value objects, use cases, and layer boundaries.
   - **Kotlin & Jetpack (`kotlin-jetpack` / `android-app-development`)**: Apply when implementing modern Kotlin code, Coroutines, Flow, and Jetpack Compose UIs.
+  - **ADR Documentation (`adr-documentation`)**: Apply when documenting major architectural decisions, technical trade-offs, and design rationales under `docs/explanation/adr/`.
 
 ---
 
