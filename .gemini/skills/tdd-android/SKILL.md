@@ -1,17 +1,36 @@
 ---
 name: tdd-android
-description: Guidelines and best practices for Test-Driven Development (TDD) in Android application development using Kotlin, JUnit, MockK, Kotest, and Compose Test.
+description: Guidelines and best practices for Canon TDD (Test-Driven Development) in Android development, emphasizing Test Plan maintenance, Red-Green-Refactor cycles, JUnit, MockK, and Compose Test.
 ---
 
-# Test-Driven Development (TDD) Skill (`tdd-android`)
+# Canon Test-Driven Development (Canon TDD) Skill (`tdd-android`)
 
-This skill outlines the workflow and practices for applying **Test-Driven Development (TDD)** to Kotlin and Android application development.
+This skill outlines the workflow and practices for applying **Canon TDD** (as defined by Kent Beck) to Kotlin and Android application development.
 
-## The TDD Cycle (Red - Green - Refactor)
+## Core Principle: Canon TDD & Test Plan Maintenance
 
-1. **Red**: Write a small, failing unit test that describes the expected behavior/contract before writing production code.
-2. **Green**: Write the minimal production code necessary to make the test pass.
-3. **Refactor**: Clean up and optimize the code (structure, naming, duplication) while ensuring all tests remain green.
+In Canon TDD, **maintaining a Test Plan (Test List) before writing any test or code is the MOST CRITICAL step.** Never skip test planning.
+
+### Step-by-Step Canon TDD Workflow
+
+1. **Step 0: Test Plan Maintenance (CRITICAL / MOST IMPORTANT)**
+   - Before writing any code or tests, create and maintain a explicit **Test List (Test Plan)** covering expected behaviors, happy paths, edge cases, and error states.
+   - Continuously update this list throughout development (check off completed items, add newly discovered edge cases).
+
+2. **Step 1: Red**
+   - Pick **one** item from the Test Plan.
+   - Write a small, clear, failing test that specifies the expected contract.
+   - Confirm that the test fails for the right reason.
+
+3. **Step 2: Green**
+   - Write the simplest, minimal production code needed to make the test pass.
+   - Do not write extra un-tested functionality.
+
+4. **Step 3: Refactor**
+   - Clean up code structure, duplication, and naming while keeping all tests passing.
+   - Update the Test Plan (mark the item done, append any newly discovered scenarios).
+
+---
 
 ## Testing Strategy & Frameworks
 
