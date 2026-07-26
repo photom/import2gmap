@@ -22,6 +22,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "tabelog2gmap"
+rootProject.name = "import2gmap"
 include(":app")
  

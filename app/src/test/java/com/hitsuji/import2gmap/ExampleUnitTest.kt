@@ -1,4 +1,4 @@
-package com.hitsuji.tabelog2gmap
+package com.hitsuji.import2gmap
 
 import org.junit.Test
 

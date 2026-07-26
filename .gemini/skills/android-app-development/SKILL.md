@@ -22,7 +22,7 @@ This skill provides guidelines and standards for building modern, robust, and ma
 
 2. **File Sharing & Intents**:
    - Use `FileProvider` (`androidx.core.content.FileProvider`) for sharing KML files to external apps safely.
-   - Trigger external apps (Google Maps, Google Earth, My Maps) using `Intent(Intent.ACTION_VIEW)` with MIME type `application/vnd.google-earth.kml+xml`.
+   - Trigger Google Maps app using `Intent(Intent.ACTION_VIEW)` with MIME type `application/vnd.google-earth.kml+xml`.
 
 3. **Asynchronous Processing**:
    - Use Kotlin Coroutines (`Dispatchers.IO`) for DOM parsing, file writing, and background tasks.

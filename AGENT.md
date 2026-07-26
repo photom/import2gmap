@@ -1,15 +1,17 @@
 # Agent Behavior & Project Guidelines (`AGENT.md`)
 
-This document defines the core guidelines and operational instructions for Antigravity agents working on the **Tabelog to Google Maps Android App** codebase.
+This document defines the core guidelines and operational instructions for Antigravity agents working on the **import2gmap Android App** codebase.
 
 ---
 
-## 1. Canon TDD & Test Plan Maintenance (MOST IMPORTANT)
+## 1. Canon TDD & Implementation Phase Test Plan Maintenance
 
 - **Canon TDD Adoption**: All feature development MUST follow **Canon TDD**.
-- **Test Plan First**: Before writing any test code or production implementation, the agent **MUST create and maintain a Test Plan (Test List)** outlining the specifications, happy paths, and edge cases.
+- **Timing of Test Plan**:
+  - Test Plans (Test Lists) are **NOT required during requirements analysis, domain modeling discussion, or architectural design**.
+  - When entering the **code implementation phase**, the agent MUST create and maintain a **Test Plan (Test List)** right before writing test code and production code.
 - **Cycle Steps**:
-  1. Maintain/Update **Test Plan** (Add cases, prioritize).
+  1. Create/Update **Test Plan** right before writing code for the feature.
   2. Write 1 failing test (**Red**).
   3. Write minimal implementation to pass (**Green**).
   4. Refactor code and update Test Plan (**Refactor**).
@@ -19,7 +21,7 @@ This document defines the core guidelines and operational instructions for Antig
 ## 2. Skill Utilization Across Development Phases
 
 - **Phase-Driven Skill Activation**: During each development phase, proactively consult and adhere to the corresponding custom skills defined under `.gemini/skills/`:
-  - **Canon TDD (`tdd-android`)**: Apply for Test Plan maintenance and the Red-Green-Refactor testing cycle.
+  - **Canon TDD (`tdd-android`)**: Apply prior to coding in the implementation phase for Test Plan maintenance and the Red-Green-Refactor cycle.
   - **DDD Architecture (`ddd-architecture`)**: Apply when designing entities, value objects, use cases, and layer boundaries.
   - **Kotlin & Jetpack (`kotlin-jetpack` / `android-app-development`)**: Apply when implementing modern Kotlin code, Coroutines, Flow, and Jetpack Compose UIs.
   - **ADR Documentation (`adr-documentation`)**: Apply when documenting major architectural decisions, technical trade-offs, and design rationales under `docs/explanation/adr/`.

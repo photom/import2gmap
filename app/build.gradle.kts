@@ -3,7 +3,7 @@ plugins {
 }
 
 android {
-    namespace = "com.hitsuji.tabelog2gmap"
+    namespace = "com.hitsuji.import2gmap"
     compileSdk {
         version = release(36) {
             minorApiLevel = 1
@@ -11,7 +11,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.hitsuji.tabelog2gmap"
+        applicationId = "com.hitsuji.import2gmap"
         minSdk = 34
         targetSdk = 36
         versionCode = 1

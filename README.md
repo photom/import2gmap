@@ -1,4 +1,4 @@
-# Tabelog to Google Maps Exporter (Android App Project)
+# import2gmap (Android App Project)
 
 このプロジェクトは、食べログのお気に入り店舗情報をAndroidアプリ（WebView）経由でパース・抽出を行い、KMLフォーマットに変換の上、Google Mapsアプリに一括送信（インテント連携）するプロジェクトです。
 
