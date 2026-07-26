@@ -1,6 +1,6 @@
-# Agent Behavior & Project Guidelines (`AGENT.md`)
+# Agent Behavior & Project Guidelines (`AGENTS.md`)
 
-This document defines the core guidelines and operational instructions for Antigravity agents working on the **import2gmap Android App** codebase.
+This document defines the core guidelines and operational instructions for Cursor agents working on the **import2gmap Android App** codebase.
 
 ---
 
@@ -20,7 +20,7 @@ This document defines the core guidelines and operational instructions for Antig
 
 ## 2. Skill Utilization Across Development Phases
 
-- **Phase-Driven Skill Activation**: During each development phase, proactively consult and adhere to the corresponding custom skills defined under `.gemini/skills/`:
+- **Phase-Driven Skill Activation**: During each development phase, proactively consult and adhere to the corresponding custom skills defined under `.cursor/skills/`:
   - **Canon TDD (`tdd-android`)**: Apply prior to coding in the implementation phase for Test Plan maintenance and the Red-Green-Refactor cycle.
   - **DDD Architecture (`ddd-architecture`)**: Apply when designing entities, value objects, use cases, and layer boundaries.
   - **Kotlin & Jetpack (`kotlin-jetpack` / `android-app-development`)**: Apply when implementing modern Kotlin code, Coroutines, Flow, and Jetpack Compose UIs.

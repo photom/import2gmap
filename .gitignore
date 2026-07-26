@@ -54,3 +54,6 @@ google-services.json
 # Antigravity CLI / Local cache files (Keep skills, agent.md, rules)
 .gemini/tmp/
 .gemini/history/
+
+# Local scratch HTML for design exploration only (not part of the product)
+sample/
