@@ -29,7 +29,19 @@ This document defines the core guidelines and operational instructions for Curso
 
 ---
 
-## 3. Code Simplicity & Clarity (KISS Principle)
+## 3. Implementation Baseline (ADR-0003 / ADR-0004)
+
+Agents MUST follow accepted ADRs and the decision checklist:
+
+- [ADR-0003](docs/explanation/adr/0003-chrome-extension-my-maps-web-import.md) — MV3 extension, extract fields, My Maps Web UI import, privacy, explicit failure.
+- [ADR-0004](docs/explanation/adr/0004-extension-implementation-baseline.md) — permissions/injection, stepped UX, npm+Vite+Vitest, `chrome.storage.session` handoff, My Maps spike gate, extension-only repo.
+- [Decision checklist](docs/explanation/chrome-extension-decision-checklist.md) — status table for accepted vs deferred items.
+
+Do not reintroduce Android/Gradle app code, Drive API/OAuth token flows, or always-on broad host access unless a new ADR supersedes these decisions.
+
+---
+
+## 4. Code Simplicity & Clarity (KISS Principle)
 
 - **Prioritize Simplicity**: Strive for **concise, straightforward, and readable** code implementations. Avoid over-engineering, unnecessary abstractions, or overly clever trickery.
 - **Clear Intent & Naming**: Use self-explanatory naming for domain models, state variables, and functions so that the codebase remains easy to follow and maintain.

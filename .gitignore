@@ -1,59 +1,40 @@
 # =========================================================================
-# Android & Gradle Git Ignore Rules
+# Chrome extension / Node / editor ignores
 # =========================================================================
 
-# Gradle build output & caches
-.gradle/
+# Dependencies & build
+node_modules/
+dist/
 build/
-app/build/
-**/build/
-.externalNativeBuild
-.cxx/
+.vite/
+coverage/
 
-# Local configuration files (contains local SDK path, local environment settings)
-local.properties
-
-# Android Studio & IntelliJ IDEA workspace files
-.idea/workspace.xml
-.idea/tasks.xml
-.idea/gradle.xml
-.idea/assetWizardSettings.xml
-.idea/dictionaries
-.idea/libraries
-.idea/caches/
-.idea/modules.xml
-.idea/compiler.xml
-*.iml
-
-# Keystore & Signing files
-*.jks
-*.keystore
-*.p12
-
-# Compiled Android artifacts
-*.apk
-*.aar
-*.ap_
-*.aab
-
-# Android Studio Captures & Navigation
-captures/
-.navigation/
-
-# OS specific files
+# Logs & temporary files
+*.log
+tmp/
 .DS_Store
 Thumbs.db
 
-# Logs & Temporary files
-*.log
-tmp/
+# Editor / IDE
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/caches/
+.idea/libraries
+*.iml
 
-# Google Services / Sensitive API Keys
-google-services.json
+# Env / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.jks
+*.keystore
 
-# Antigravity CLI / Local cache files (Keep skills, agent.md, rules)
+# Antigravity CLI local cache (keep skills)
 .gemini/tmp/
 .gemini/history/
+.gemini/oauth_creds.json
+.gemini/google_accounts.json
 
 # Local scratch HTML for design exploration only (not part of the product)
 sample/

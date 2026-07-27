@@ -19,3 +19,4 @@ The product imports restaurants into the user's My Maps without a manual file ha
 ## Consequences
 
 - My Maps UI automation needs a feasibility spike, selector isolation, sanitized fixtures, and Chrome Web Store/target-site policy review.
+- Implementation defaults (permissions, UX steps, toolchain, session storage, spike pass criteria) are recorded in [ADR-0004](0004-extension-implementation-baseline.md).

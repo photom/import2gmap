@@ -40,7 +40,7 @@ This skill establishes the documentation architecture for this project, adhering
 - **Tone**: Neutral, factual, structured.
 - **Example Files**:
   - `docs/reference/extension-ui-specifications.md`
-  - `docs/reference/tabelog-content-script-selectors.md`
+  - `docs/reference/tabelog-pc-saved-list-extraction-spec.md`
   - `docs/reference/kml-data-schema.md`
   - `docs/reference/architecture-diagrams.md`
 
@@ -49,4 +49,7 @@ This skill establishes the documentation architecture for this project, adhering
 - **Tone**: Discursive, analytical.
 - **Example Files**:
   - `docs/explanation/adr/0003-chrome-extension-my-maps-web-import.md`
+  - `docs/explanation/adr/0004-extension-implementation-baseline.md`
+  - `docs/explanation/chrome-extension-decision-checklist.md`
+  - `docs/explanation/pc-saved-list-extraction-design.md`
   - `docs/explanation/security-privacy-model.md`
