@@ -35,6 +35,7 @@ Agents MUST follow accepted ADRs and the decision checklist:
 
 - [ADR-0003](docs/explanation/adr/0003-chrome-extension-my-maps-web-import.md) — MV3 extension, extract fields, My Maps Web UI import, privacy, explicit failure.
 - [ADR-0004](docs/explanation/adr/0004-extension-implementation-baseline.md) — permissions/injection, stepped UX, npm+Vite+Vitest, `chrome.storage.session` handoff, My Maps spike gate, extension-only repo.
+- [ADR-0005](docs/explanation/adr/0005-extract-collections-for-future-pin-styling.md) — extract collections/labels now; pin colors deferred.
 - [Decision checklist](docs/explanation/chrome-extension-decision-checklist.md) — status table for accepted vs deferred items.
 
 Do not reintroduce Android/Gradle app code, Drive API/OAuth token flows, or always-on broad host access unless a new ADR supersedes these decisions.

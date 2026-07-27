@@ -38,13 +38,16 @@ chrome.runtime.sendMessage({ type: "EXTRACT_START" } as const);
 
 ## Cross-context messages
 
+Normative protocol: `docs/reference/extension-messaging-protocol.md`.
+
 Define a single tagged union; validate at every receiver:
 
 ```ts
 type ExtensionMessage =
-  | { type: "EXTRACT_START" }
-  | { type: "EXTRACT_RESULT"; shops: readonly ExtractedShop[] }
-  | { type: "EXTRACT_ERROR"; code: string; message: string };
+  | { type: "EXTRACT_START"; protocolVersion: 1 }
+  | { type: "EXTRACT_PROGRESS"; protocolVersion: 1; jobId: string; progress: ExtractProgress }
+  | { type: "EXTRACT_SUCCEEDED"; protocolVersion: 1; jobId: string; shopCount: number; collectionCount: number }
+  | { type: "EXTRACT_FAILED"; protocolVersion: 1; code: string; message: string; retryStep: "extract" | "import" | "none" };
 
 function isExtensionMessage(value: unknown): value is ExtensionMessage {
   // narrow on typeof / type tag / field shapes — never trust sender

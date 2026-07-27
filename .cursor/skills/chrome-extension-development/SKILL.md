@@ -54,8 +54,9 @@ manifest.json
 
 ## UX & data (v1)
 
-- Stepped popup; user must already be on the PC saved-list tab for extract.
-- Default map name `食べログ保存リスト YYYY-MM-DD` (editable before import).
+- Popup-only entry (no in-page extract chrome). See `docs/reference/extension-ui-specifications.md`.
+- Flow: ready → extracting → **extract_complete** → (Next) confirm → Import start.
+- Confirm: shop count + collection count + editable map name (default `食べログ保存リスト YYYY-MM-DD`).
 - Extract results in `chrome.storage.session`; KML built in memory at import.
 - Progress + cancel during pager crawl; explicit error codes + retry.
 

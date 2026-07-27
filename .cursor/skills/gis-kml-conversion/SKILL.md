@@ -7,7 +7,10 @@ description: Specification and algorithms for converting extracted shop data int
 
 This skill defines the data formatting rules and XML generation logic for converting shop records into **KML (Keyhole Markup Language)** for seamless Google Maps / My Maps integration.
 
+Normative schema: `docs/reference/kml-data-schema.md`.
+
 Product fields: `name` → `<name>`, `address` → `<address>`, `description` → `<description>`.
+`collections` stay on the domain model for a **future** pin-color / style pass (not required in KML for extraction-only / v1 import baseline).
 
 `description` contract (from extraction):
 

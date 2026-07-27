@@ -12,12 +12,15 @@ This document defines selectors, field mapping, pager traversal, sanitization, a
 | :--- | :--- |
 | Shop name, Tabelog shop URL, street address | Ratings, budgets, holiday text, phone numbers |
 | Optional short description (area / category line) | Account, profile, cookies, tokens, reviewer identity |
-| Pager discovery and multi-page crawl | Map view, search filters, sidebar collections |
+| **Collections (labels)** assigned to each shop | Bookmark memo / comment text, visit counts, degrees |
+| Page-level collection catalog (id + name) | Map view, search-filter *application* (reading the filter UI for catalog is OK) |
+| Pager discovery and multi-page crawl | |
 
 - Extraction runs only after an **explicit user action**.
-- Do **not** read `#js-bookmarks-data` or other hidden JSON blobs for shop fields (may contain private memo / label data and lacks address).
+- `#js-bookmarks-data` may be read **only** for per-shop `labels` (`id`, `title`). Do **not** read or persist `bookmark_comment*`, reviewer-only URLs, or other blob fields.
 - Do **not** persist phone numbers even when they appear in copy-helper markup.
 - Selector or structure mismatch → **explicit failure**; partial success is not allowed for a crawl that claimed completeness.
+- Collections are extracted now so a **later** My Maps step can color pins per collection; **v1 extraction does not** apply pin colors.
 
 ---
 
@@ -42,8 +45,8 @@ If detection fails, abort with `NotSavedListPage`.
 
 | Role | Selector | Notes |
 | :--- | :--- | :--- |
-| Item root | `div.js-bookmark` | One shop per node. Optional attrs: `data-rst-id`, `data-interested-review-id` (use `data-rst-id` only as dedupe key if URL missing). |
-| Card body | `.js-bookmark .rvw-item.js-rvw-item` | Structural wrapper; do not scrape from outside the root. |
+| Item root | `div.js-bookmark` | One shop per node. Attr `data-rst-id` keys into bookmarks JSON for collections. Optional `data-interested-review-id`. |
+| Card body | `.js-bookmark .rvw-item.js-rvw-item` | Structural wrapper; do not scrape shop fields from outside the root. |
 
 ### 3.2 Required fields
 
@@ -63,18 +66,69 @@ If detection fails, abort with `NotSavedListPage`.
 
 Do not treat ratings (`.simple-rvw__score-total-val`), budgets (`.simple-rvw__budget`), or holidays (`.simple-rvw__holiday-text`) as description.
 
-### 3.4 Output record (logical)
+### 3.4 Collections (per shop)
+
+List-item chrome (`.rvw-item__bkm-custom.js-hozon-preview`) is often empty in static HTML and filled by page scripts. **Do not** rely on that node for collection names.
+
+| Source | Selector / attr | Use |
+| :--- | :--- | :--- |
+| Bookmarks blob | `#js-bookmarks-data[data-bookmarks]` | JSON object keyed by restaurant id string |
+| Shop key | `div.js-bookmark[data-rst-id]` | Must match a key in the blob |
+
+Per shop entry, read only:
 
 ```ts
+labels: Array<{ id: number | string; title: string; checked?: boolean }>
+```
+
+#### Algorithm (per page, then per item)
+
+1. If `#js-bookmarks-data` is absent → every shop on the page gets `collections: []` (do not fail the crawl solely for this).
+2. If present: read `data-bookmarks`, HTML-entity-decode once, `JSON.parse`. Failure → `BookmarksDataInvalid`.
+3. For each `div.js-bookmark`:
+   - Let `rstId = data-rst-id` (string). If missing → `collections: []` for that item.
+   - Let `labels = bookmarks[rstId].labels ?? []`.
+   - Map each label with non-empty sanitized `title` to `{ id: String(id), name: sanitizedTitle }`.
+   - Include all labels in the array (membership list). Ignore unknown extra keys.
+4. Deduplicate by `id` within one shop (keep first name).
+5. Never copy `bookmark_comment`, `bookmark_comment_preview*`, or other blob fields into the domain record.
+
+### 3.5 Page-level collection catalog
+
+Also extract a catalog for later pin-color mapping (unique id → name):
+
+| Priority | Source |
+| :--- | :--- |
+| 1 | `#js-collection[data-collection-attributes]` → JSON array of `{ label_id, title }` |
+| 2 (fallback) | `select.js-collections-sidebar-selector option[value]:not([value=""])` → `value` = id, `textContent` = name |
+
+Sanitize names; stringify ids. Empty catalog is allowed. Invalid `#js-collection` JSON when the node exists → `CollectionCatalogInvalid` (explicit failure).
+
+Union catalog ids with any ids seen on shops so orphans from pagination still appear after a full crawl (merge catalogs across pages by id).
+
+### 3.6 Output record (logical)
+
+```ts
+type CollectionRef = {
+  id: string;   // required, sanitized digit string (or opaque id string)
+  name: string; // required, sanitized plain text
+};
+
 type ExtractedShop = {
-  name: string;       // required, sanitized
-  url: string;        // required, sanitized allowlisted URL
-  address: string;    // required, sanitized
+  name: string;        // required, sanitized
+  url: string;         // required, sanitized allowlisted URL
+  address: string;     // required, sanitized
   description: string; // required for KML: URL on first line, optional areaCategory after
+  collections: readonly CollectionRef[]; // may be empty
+};
+
+type ExtractedSavedList = {
+  shops: readonly ExtractedShop[];
+  collectionsCatalog: readonly CollectionRef[]; // may be empty; for future pin colors
 };
 ```
 
-`description` assembly (after sanitizing parts):
+`description` assembly (after sanitizing parts) — **collections are not inlined here** (kept structured for later styling):
 
 ```text
 {url}
@@ -144,14 +198,16 @@ Page index appears in link query as `PG={n}` (1-based).
 ### 5.3 Crawl procedure
 
 1. Confirm page detection (Section 2).
-2. Extract all items on the current DOM (Section 3–4); append to an in-memory list; dedupe by normalized `url` (fallback: `data-rst-id`).
-3. If `a.c-pagination__arrow--next[rel="next"]` exists:
+2. Parse bookmarks blob + collection catalog for this document (Section 3.4–3.5).
+3. Extract all items on the current DOM (Section 3–4); attach collections; append to an in-memory list; dedupe shops by normalized `url` (fallback: `data-rst-id`). When deduping, **merge** `collections` by collection `id`.
+4. Merge `collectionsCatalog` by `id` across pages.
+5. If `a.c-pagination__arrow--next[rel="next"]` exists:
    - Navigate by assigning `location` to that `href` **or** synthesizing the same path with `PG` incremented while preserving other query params.
    - Wait for list settle: item roots present and either `PG` matches or current page number updates.
    - Repeat from step 2.
-4. If next link is absent, crawl is complete.
-5. Completeness check (when total was parsed): `uniqueShopCount === total`; mismatch → `IncompleteCrawl` (explicit failure).
-6. Single-page lists may omit the next arrow; that is success if items extracted and (if total present) counts match.
+6. If next link is absent, crawl is complete.
+7. Completeness check (when total was parsed): `uniqueShopCount === total`; mismatch → `IncompleteCrawl` (explicit failure).
+8. Single-page lists may omit the next arrow; that is success if items extracted and (if total present) counts match.
 
 Do not click sort links or map-view links during crawl.
 
@@ -161,7 +217,7 @@ Do not click sort links or map-view links during crawl.
 
 Apply sanitization to **every** extracted string before domain validation or KML use. Prefer `textContent` / attribute string values over `innerHTML`.
 
-### 6.1 Plain-text fields (`name`, `address`, `areaCategory`)
+### 6.1 Plain-text fields (`name`, `address`, `areaCategory`, collection `name`)
 
 1. Unicode normalize **NFKC**.
 2. Strip all HTML tags if any remain (`/<[^>]*>/g` → empty).
@@ -171,9 +227,9 @@ Apply sanitization to **every** extracted string before domain validation or KML
    - `<script`, `</script`, `<style`, `</style`, `<iframe`, `<object`, `<embed`, `<link`, `<meta`
    - Inline event-handler prefixes: `onerror=`, `onload=`, `onclick=`, etc.
    - CSS vectors: `expression(`, `-moz-binding`, `behavior:`, `url(javascript`
-5. Strip ASCII control chars except `\n` / `\t`; collapse internal whitespace to single spaces for `name` / `address` / `areaCategory` (keep a single `\n` only when assembling `description`).
-6. Trim; reject empty required fields.
-7. Enforce max lengths (suggested): `name` 200, `address` 400, `areaCategory` 300, `description` 800.
+5. Strip ASCII control chars except `\n` / `\t`; collapse internal whitespace to single spaces for plain fields (keep a single `\n` only when assembling `description`).
+6. Trim; reject empty required fields (`name` / `address`; collection entries with empty name after sanitize are dropped).
+7. Enforce max lengths (suggested): `name` 200, `address` 400, `areaCategory` 300, collection `name` 100, `description` 800, collection `id` 32.
 
 ### 6.2 URL field
 
@@ -184,13 +240,19 @@ Apply sanitization to **every** extracted string before domain validation or KML
 5. Drop fragment; keep path; ignore tracking-only query unless required for identity (default: strip query for the canonical shop URL stored in the record).
 6. Serialize to a single-line absolute URL string; reject on failure (`InvalidShopUrl`).
 
-### 6.3 KML / XML emission
+### 6.3 Collection id
 
-When embedding into KML:
+- Prefer decimal digit strings from `label_id` / `labels[].id`.
+- Reject ids containing `<`, `>`, `"`, `'`, or whitespace after stringify/trim.
+
+### 6.4 KML / XML emission
+
+When embedding into KML (import phase; pin colors **out of scope for extraction-only**):
 
 - Put text in elements as **escaped XML** (`&`, `<`, `>`, `"`, `'`), or inside `<![CDATA[ ... ]]>` **after** Section 6.1–6.2 sanitization.
 - Never assign unsanitized strings to `innerHTML` in the extension UI.
 - `description` first line must remain the sanitized URL; following lines are sanitized plain text only (no markup).
+- Keep `collections` on the domain object for a future styling pass; do not require KML style URLs in v1 extraction.
 
 ---
 
@@ -202,16 +264,18 @@ When embedding into KML:
 | `ItemNameMissing` | Name empty after sanitize |
 | `ItemUrlMissing` / `InvalidShopUrl` | No allowlisted URL |
 | `AddressMissing` | Address parse/sanitize failed |
-| `SelectorDrift` | Expected node missing for an otherwise present item root |
+| `BookmarksDataInvalid` | `#js-bookmarks-data` present but JSON/parse failed |
+| `CollectionCatalogInvalid` | `#js-collection` present but JSON/parse failed |
+| `SelectorDrift` | Expected node missing for an otherwise present item root (name/url/address path) |
 | `IncompleteCrawl` | Pager finished but count ≠ unique shops |
 | `EmptyList` | Valid page but zero `div.js-bookmark` |
 
-Any item-level failure during a full-list import aborts the batch (no silent skip), unless a future product flag explicitly allows skip-with-report (default: abort).
+Empty `collections` on a shop is **valid**. Any item-level failure for required fields during a full-list import aborts the batch (no silent skip), unless a future product flag explicitly allows skip-with-report (default: abort).
 
 ---
 
 ## 8. Fixture & Test Expectations
 
-- Unit-test parsers against **sanitized HTML fixtures** that mirror the selectors above (item root, name target, copy textarea layout, pager).
-- Fixtures must not include real account identifiers; replace reviewer path segments with placeholders.
-- Cover: entity-encoded names, ampersands in names, missing next arrow, missing address line, `javascript:` href rejection, area-catg-not-used-as-address, description URL-first ordering.
+- Unit-test parsers against **sanitized HTML fixtures** that mirror the selectors above (item root, name target, copy textarea layout, pager, `#js-bookmarks-data` labels, `#js-collection` / sidebar select).
+- Fixtures must not include real account identifiers; replace reviewer path segments with placeholders; use fake collection titles.
+- Cover: entity-encoded names, ampersands in names, missing next arrow, missing address line, `javascript:` href rejection, area-catg-not-used-as-address, description URL-first ordering, shop with zero labels, shop with multiple labels, invalid bookmarks JSON → `BookmarksDataInvalid`, merge collections on URL dedupe.
