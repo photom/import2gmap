@@ -9,12 +9,12 @@ This skill defines the guidelines and standards for creating and maintaining **A
 
 ## Purpose of ADRs
 
-ADRs record significant architectural decisions made during development (e.g., choosing Jetpack Compose, adopting Canon TDD, using Room DB, or designing KML generation logic), including their context, decisions, and consequences.
+ADRs record significant architectural decisions made during development (e.g., choosing Manifest V3, adopting Canon TDD, selecting host permissions, or designing KML generation logic), including their context, decisions, and consequences.
 
 ## File Location & Naming Convention
 
 - **Directory**: `docs/explanation/adr/` (or `docs/adr/`)
-- **Naming Pattern**: `NNNN-short-descriptive-title.md` (e.g., `0001-use-canon-tdd-and-ddd.md`, `0002-jetpack-compose-ui-framework.md`).
+- **Naming Pattern**: `NNNN-short-descriptive-title.md` (e.g., `0001-use-canon-tdd-and-ddd.md`, `0002-manifest-v3-extension-architecture.md`).
 
 ---
 
@@ -34,7 +34,7 @@ Explain the context, problem, technical drivers, and requirements that triggered
 
 ## Decision Drivers & Constraints
 - Driver 1 (e.g., maintainability, testability)
-- Driver 2 (e.g., offline support, Android API level restrictions)
+- Driver 2 (e.g., offline support, Chrome version restrictions)
 
 ## Considered Options
 1. **Option 1**: [Description & Pros/Cons]

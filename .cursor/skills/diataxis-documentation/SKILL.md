@@ -26,22 +26,21 @@ This skill establishes the documentation architecture for this project, adhering
 ### 1. Tutorials (Learning-Oriented)
 - **Goal**: Help beginners get started successfully.
 - **Tone**: Encouraging, step-by-step, non-distracting.
-- **Example File**: `docs/tutorials/quick-start.md` (Running the app for the first time).
+- **Example File**: `docs/tutorials/quick-start.md` (Load the unpacked extension for the first time).
 
 ### 2. How-To Guides (Goal-Oriented)
 - **Goal**: Guide users through completing a specific task.
 - **Tone**: Direct, sequence of practical steps.
-- **Example Files**: 
-  - `docs/how-to/export-tabelog-bookmarks.md`
-  - `docs/how-to/import-kml-to-google-maps.md`
+- **Example Files**:
+  - `docs/how-to/extract-tabelog-bookmarks.md`
+  - `docs/how-to/import-kml-via-my-maps-web.md`
 
 ### 3. Reference (Information-Oriented)
 - **Goal**: Describe the machinery accurately and completely.
 - **Tone**: Neutral, factual, structured.
 - **Example Files**:
-  - `docs/reference/screen-specifications.md`
-  - `docs/reference/screen-composition-specifications.md`
-  - `docs/reference/tabelog-scraping-extraction-spec.md`
+  - `docs/reference/extension-ui-specifications.md`
+  - `docs/reference/tabelog-content-script-selectors.md`
   - `docs/reference/kml-data-schema.md`
   - `docs/reference/architecture-diagrams.md`
 
@@ -49,5 +48,5 @@ This skill establishes the documentation architecture for this project, adhering
 - **Goal**: Explain background, context, architectural decisions, and design choices.
 - **Tone**: Discursive, analytical.
 - **Example Files**:
-  - `docs/explanation/architecture-decisions.md` (Why Kotlin & Android WebView were chosen).
+  - `docs/explanation/adr/0003-chrome-extension-my-maps-web-import.md`
   - `docs/explanation/security-privacy-model.md`

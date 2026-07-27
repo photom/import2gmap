@@ -1,13 +1,13 @@
 ---
 name: web-scraping-dom-parsing
-description: Hardcoded DOM extraction for Tabelog smartphone saved lists via WebView, including load-more crawling and address enrichment from shop detail pages. Never extract personal or account information. See docs/reference/tabelog-scraping-extraction-spec.md.
+description: Hardcoded DOM extraction for Tabelog smartphone saved lists via Manifest V3 content scripts, including load-more crawling and address enrichment from shop detail pages. Never extract personal or account information.
 ---
 
 # Web Scraping & DOM Parsing Skill (`web-scraping-dom-parsing`)
 
-Extract **店舗名 / 住所 / 食べログ URL** from Tabelog **スマホ版** 保存リスト using **fixed selectors**. Full spec: `docs/reference/tabelog-scraping-extraction-spec.md`.
+Extract **店舗名 / 住所 / 食べログ URL** from Tabelog **スマホ版** 保存リスト using **fixed selectors** in a content script. Host scope: `https://s.tabelog.com/`.
 
-WebView: mobile UA + initial URL `https://s.tabelog.com/`. User navigates to the saved list; scrape from there.
+The user opens the saved list in Chrome; the extension runs extraction on that page after an explicit user action.
 
 ## Privacy Mandate
 Do **not** read/store/transmit account or PII.
@@ -23,7 +23,7 @@ Do **not** read/store/transmit account or PII.
 Never treat area/genre as address. Collect **all** load-more batches before success.
 
 ## Flow
-1. Detect smartphone saved-list page.
+1. Detect smartphone saved-list page in the active tab.
 2. Extract name+url batches; click load-more until exhausted; dedupe by url.
 3. Enrich address from each shop detail.
 4. Require name+address+url on every shop; otherwise explicit error.

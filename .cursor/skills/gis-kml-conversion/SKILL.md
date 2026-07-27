@@ -1,6 +1,6 @@
 ---
 name: gis-kml-conversion
-description: Specification and algorithms for converting extracted shop data into valid KML (Keyhole Markup Language) XML files for Google Maps import. Fields: name, address, Tabelog URL in description.
+description: Specification and algorithms for converting extracted shop data into valid KML (Keyhole Markup Language) XML for Google My Maps import. Fields: name, address, Tabelog URL in description.
 ---
 
 # GIS & KML Conversion Skill (`gis-kml-conversion`)
@@ -17,7 +17,7 @@ A valid KML document containing shop placemarks must conform to the OGC KML 2.2 
 <kml xmlns="http://www.opengis.net/kml/2.2">
   <Document>
     <name>食べログお気に入りリスト</name>
-    <description>Tabelog Bookmarks Exported via Android App</description>
+    <description>Tabelog Bookmarks Exported via Chrome Extension</description>
     <Placemark>
       <name>{shop-name}</name>
       <description><![CDATA[
@@ -37,19 +37,7 @@ Do not embed rating, genre, phone, or account/PII fields.
 2. **Coordinate-based Placement**:
    - If latitude and longitude are present, include `<Point><coordinates>lng,lat,0</coordinates></Point>`.
 
-## Android File Export & Intent
-```kotlin
-fun shareKmlFile(context: Context, kmlFile: File) {
-    val contentUri: Uri = FileProvider.getUriForFile(
-        context,
-        "${context.packageName}.fileprovider",
-        kmlFile
-    )
-    val intent = Intent(Intent.ACTION_VIEW).apply {
-        setDataAndType(contentUri, "application/vnd.google-earth.kml+xml")
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    }
-    context.startActivity(Intent.createChooser(intent, "Google Maps で開く"))
-}
-```
+## In-Memory Transfer (Chrome Extension)
+- Build the KML string in memory; do not write credentials or profile data into the document.
+- Prefer a `Blob` / in-memory file handle for My Maps Web UI import automation (`google-my-maps-web-import`).
+- Optional user download may use `chrome.downloads` or an object URL; keep the payload limited to name, address, and Tabelog URL.

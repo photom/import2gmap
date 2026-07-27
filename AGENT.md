@@ -1,6 +1,6 @@
 # Agent Behavior & Project Guidelines (`AGENT.md`)
 
-This document defines the core guidelines and operational instructions for Antigravity agents working on the **import2gmap Android App** codebase.
+This document defines the core guidelines and operational instructions for Antigravity agents working on the **import2gmap Chrome Extension** codebase.
 
 ---
 
@@ -21,10 +21,10 @@ This document defines the core guidelines and operational instructions for Antig
 ## 2. Skill Utilization Across Development Phases
 
 - **Phase-Driven Skill Activation**: During each development phase, proactively consult and adhere to the corresponding custom skills defined under `.gemini/skills/`:
-  - **Canon TDD (`tdd-android`)**: Apply prior to coding in the implementation phase for Test Plan maintenance and the Red-Green-Refactor cycle.
+  - **Canon TDD (`tdd-webextension`)**: Apply prior to coding in the implementation phase for Test Plan maintenance and the Red-Green-Refactor cycle.
   - **DDD Architecture (`ddd-architecture`)**: Apply when designing entities, value objects, use cases, and layer boundaries.
-  - **Kotlin & Jetpack (`kotlin-jetpack` / `android-app-development`)**: Apply when implementing modern Kotlin code, Coroutines, Flow, and Jetpack Compose UIs.
-  - **Google My Maps Import (`google-my-maps-import`)**: Apply when implementing Google OAuth2, Drive API KML upload, or My Maps cloud import (with `gis-kml-conversion`).
+  - **Chrome Extension (`typescript-webextension` / `chrome-extension-development`)**: Apply when implementing Manifest V3, TypeScript, service workers, content scripts, and extension UI.
+  - **Google My Maps Web Import (`google-my-maps-web-import`)**: Apply when implementing My Maps Web UI automation (with `gis-kml-conversion`).
   - **ADR Documentation (`adr-documentation`)**: Apply when documenting major architectural decisions, technical trade-offs, and design rationales under `docs/explanation/adr/`.
 
 ---
@@ -33,4 +33,4 @@ This document defines the core guidelines and operational instructions for Antig
 
 - **Prioritize Simplicity**: Strive for **concise, straightforward, and readable** code implementations. Avoid over-engineering, unnecessary abstractions, or overly clever trickery.
 - **Clear Intent & Naming**: Use self-explanatory naming for domain models, state variables, and functions so that the codebase remains easy to follow and maintain.
-- **Focused Responsibilities**: Keep functions, domain classes, and Compose composables short, modular, and focused on a single responsibility.
+- **Focused Responsibilities**: Keep functions, domain classes, and extension UI components short, modular, and focused on a single responsibility.
