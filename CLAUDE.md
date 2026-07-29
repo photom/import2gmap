@@ -1,6 +1,6 @@
-# Agent Behavior & Project Guidelines (`AGENT.md`)
+# Agent Behavior & Project Guidelines (`CLAUDE.md`)
 
-This document defines the core guidelines and operational instructions for Antigravity agents working on the **import2gmap Chrome Extension** codebase.
+This document defines the core guidelines and operational instructions for Claude agents working on the **import2gmap Chrome Extension** codebase.
 
 ---
 
@@ -20,7 +20,7 @@ This document defines the core guidelines and operational instructions for Antig
 
 ## 2. Skill Utilization Across Development Phases
 
-- **Phase-Driven Skill Activation**: During each development phase, proactively consult and adhere to the corresponding custom skills defined under `.gemini/skills/`:
+- **Phase-Driven Skill Activation**: During each development phase, proactively consult and adhere to the corresponding custom skills defined under `.claude/skills/`:
   - **Canon TDD (`tdd-webextension`)**: Apply prior to coding in the implementation phase for Test Plan maintenance and the Red-Green-Refactor cycle.
   - **DDD Architecture (`ddd-architecture`)**: Apply when designing entities, value objects, use cases, and layer boundaries.
   - **Chrome Extension & WXT Framework (`wxt-webextension` / `typescript-webextension` / `chrome-extension-development`)**: Apply when implementing Manifest V3, WXT framework, TypeScript, service workers, content scripts, and extension UI.

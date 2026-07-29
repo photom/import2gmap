@@ -199,7 +199,7 @@ Page index appears in link query as `PG={n}` (1-based).
 
 1. Confirm page detection (Section 2).
 2. Parse bookmarks blob + collection catalog for this document (Section 3.4–3.5).
-3. Extract all items on the current DOM (Section 3–4); attach collections; append to an in-memory list; dedupe shops by normalized `url` (fallback: `data-rst-id`). When deduping, **merge** `collections` by collection `id`.
+3. Extract all items on the current DOM (Section 3–4); attach collections; append to an in-memory list; dedupe shops by normalized `url` (fallback: `data-rst-id`). When deduping, **merge** `collections` by collection `id`. If text fields (name, address, etc.) differ on duplicates, preserve the first encountered shop's fields.
 4. Merge `collectionsCatalog` by `id` across pages.
 5. If `a.c-pagination__arrow--next[rel="next"]` exists:
    - Navigate by assigning `location` to that `href` **or** synthesizing the same path with `PG` incremented while preserving other query params.
@@ -229,7 +229,7 @@ Apply sanitization to **every** extracted string before domain validation or KML
    - CSS vectors: `expression(`, `-moz-binding`, `behavior:`, `url(javascript`
 5. Strip ASCII control chars except `\n` / `\t`; collapse internal whitespace to single spaces for plain fields (keep a single `\n` only when assembling `description`).
 6. Trim; reject empty required fields (`name` / `address`; collection entries with empty name after sanitize are dropped).
-7. Enforce max lengths (suggested): `name` 200, `address` 400, `areaCategory` 300, collection `name` 100, `description` 800, collection `id` 32.
+7. Enforce max lengths: `name` 200, `address` 400, `areaCategory` 300, collection `name` 100, `description` 800, collection `id` 32. Any string exceeding the limit is automatically truncated to the maximum allowed length.
 
 ### 6.2 URL field
 

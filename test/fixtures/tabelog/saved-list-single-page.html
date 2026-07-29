@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>テストユーザーさんの保存リストのお店 [食べログ]</title>
+</head>
+<body>
+  <div class="js-rvwr-list-main">
+    <div class="search-condition--hozon">
+      <span class="search-condition__title">保存リスト</span>
+    </div>
+
+    <div id="js-bookmark-list-view" data-list-view="hozon">
+      <!-- Page Count Chrome -->
+      <div class="rvw-page-count">
+        <p class="c-page-count">
+          <span class="c-page-count__num"><strong>1</strong></span>～<span class="c-page-count__num"><strong>2</strong></span>件を表示／全<span class="c-page-count__num"><strong>2</strong></span>件
+        </p>
+      </div>
+
+      <!-- Item 1 -->
+      <div class="js-bookmark" data-rst-id="10000001">
+        <div class="rvw-item js-rvw-item">
+          <div class="simple-rvw">
+            <a class="simple-rvw__rst-name-target" href="https://tabelog.com/tokyo/A1301/A130101/10000001/">テスト店舗1</a>
+            <p class="simple-rvw__area-catg">銀座 / 居酒屋</p>
+            <textarea class="rst-info-copy__item-txt js-rst-info-copy__item-txt">テスト店舗1&#10;03-1234-5678&#10;東京都中央区銀座1-2-3 テストビル1F&#10;https://tabelog.com/tokyo/A1301/A130101/10000001/</textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- Item 2 -->
+      <div class="js-bookmark" data-rst-id="10000002">
+        <div class="rvw-item js-rvw-item">
+          <div class="simple-rvw">
+            <a class="simple-rvw__rst-name-target" href="https://tabelog.com/tokyo/A1302/A130201/10000002/">テスト店舗2</a>
+            <p class="simple-rvw__area-catg">東京 / イタリアン</p>
+            <textarea class="rst-info-copy__item-txt js-rst-info-copy__item-txt">テスト店舗2&#10;03-9876-5432&#10;東京都千代田区丸の内1-1-1&#10;https://tabelog.com/tokyo/A1302/A130201/10000002/</textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pagination (single page - no next link) -->
+      <div class="list-controll">
+        <div class="c-pagination">
+          <ul class="c-pagination__list">
+            <li class="c-pagination__item"><strong class="c-pagination__num is-current">1</strong></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Collections Catalog -->
+  <div id="js-collection" data-collection-attributes='[{"label_id":101,"title":"行きたいお店"},{"label_id":102,"title":"お気に入り"}]'></div>
+
+  <!-- Bookmarks Data -->
+  <div id="js-bookmarks-data" data-bookmarks='{"10000001":{"labels":[{"id":101,"title":"行きたいお店"}]},"10000002":{"labels":[{"id":101,"title":"行きたいお店"},{"id":102,"title":"お気に入り"}]}}'></div>
+</body>
+</html>

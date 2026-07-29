@@ -42,9 +42,8 @@ ADR-0003 chose a desktop Manifest V3 Chrome extension with TypeScript, PC saved-
 
 ### 3. Toolchain & repository shape
 
-- **Package manager**: npm.
-- **Bundler**: Vite (separate entries: service worker, Tabelog content, My Maps content, popup).
-- **Tests**: Vitest for domain/parsers with sanitized HTML fixtures (Canon TDD). Browser E2E deferred.
+- **Package manager & Framework**: npm + **WXT** (`wxt.dev`) for development, bundling, entrypoint management, and testing ([ADR-0006](0006-wxt-framework-adoption.md)).
+- **Bundler & Tests**: Vite + Vitest for domain/parsers with sanitized HTML fixtures (Canon TDD). Browser E2E deferred.
 - **Distribution**: Load unpacked for development; Web Store packaging deferred.
 - **Repository**: Chrome-extension-only. Remove Android/Gradle app scaffold (`app/`, root Gradle wrapper files, Android IDE crumbs as applicable).
 

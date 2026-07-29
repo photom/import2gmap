@@ -23,7 +23,7 @@ This document defines the core guidelines and operational instructions for Curso
 - **Phase-Driven Skill Activation**: During each development phase, proactively consult and adhere to the corresponding custom skills defined under `.cursor/skills/`:
   - **Canon TDD (`tdd-webextension`)**: Apply prior to coding in the implementation phase for Test Plan maintenance and the Red-Green-Refactor cycle.
   - **DDD Architecture (`ddd-architecture`)**: Apply when designing entities, value objects, use cases, and layer boundaries.
-  - **Chrome Extension (`typescript-webextension` / `chrome-extension-development`)**: Apply when implementing Manifest V3, TypeScript, service workers, content scripts, and extension UI.
+  - **Chrome Extension & WXT Framework (`wxt-webextension` / `typescript-webextension` / `chrome-extension-development`)**: Apply when implementing Manifest V3, WXT framework, TypeScript, service workers, content scripts, and extension UI.
   - **Google My Maps Web Import (`google-my-maps-web-import`)**: Apply when implementing My Maps Web UI automation (with `gis-kml-conversion`).
   - **ADR Documentation (`adr-documentation`)**: Apply when documenting major architectural decisions, technical trade-offs, and design rationales under `docs/explanation/adr/`.
 
