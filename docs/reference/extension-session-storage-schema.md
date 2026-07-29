@@ -10,8 +10,8 @@ Related: [messaging](extension-messaging-protocol.md), [UI spec](extension-ui-sp
 
 | Rule | Detail |
 | :--- | :--- |
-| Area | `chrome.storage.session` only for shop lists / UI step / jobs (v1). Not `local` |
-| Writer | **Service worker only** |
+| Area | `chrome.storage.session` accessed via WXT `storage` API (`session:import2gmap`). Not `local` |
+| Writer | **Background service worker only** (`entrypoints/background.ts`) |
 | Readers | Worker (authoritative); popup via `GET_UI_STATE` / pushed `UI_STATE` (prefer not reading storage directly) |
 | Validation | On every read, parse with schema guards; corrupt → clear extract success + `SessionCorrupt` |
 | Success atomicity | Publish `extractResult` only after a **complete** successful crawl |
