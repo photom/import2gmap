@@ -1,95 +1,38 @@
 ---
 name: chrome-extension-development
-description: Build desktop Chrome extensions with Manifest V3 and TypeScript (service worker, content scripts, popup/options, permissions, messaging). Use when implementing or scaffolding the extension, editing manifest.json, wiring entries, or choosing host permissions.
+description: Normative baseline and guidelines for Manifest V3 Chrome Extension development using WXT framework, TypeScript, and Vitest.
 ---
 
-# Chrome Extension Development (MV3 + TypeScript) (`chrome-extension-development`)
+# Chrome Extension Development Guidelines
 
-Develop the extension in **TypeScript**, bundle to JS, and run as a **Manifest V3** desktop Chrome extension. Apply `typescript-webextension` for language/typing rules.
+This skill provides guidelines and decision criteria for developing the Manifest V3 extension with **WXT** (`wxt.dev`), TypeScript, and Vitest.
 
-**Normative defaults**: [ADR-0004](../../../docs/explanation/adr/0004-extension-implementation-baseline.md) and the [decision checklist](../../../docs/explanation/chrome-extension-decision-checklist.md).
+---
 
-## Manifest V3 essentials
+## 1. Core Principles
 
-- `manifest_version: 3`
-- Background: **service worker** (`background.service_worker`)
-- v1: **no** always-on `content_scripts`; inject with `chrome.scripting.executeScript` after user action
-- Permissions: `storage`, `activeTab`, `scripting`
-- `optional_host_permissions`: narrow Tabelog + Google Maps / My Maps hosts (request at flow start)
-- All executable code is **packaged**; no remote code
+- **Manifest V3 Architecture**: Background Service Worker (`entrypoints/background.ts`), Popup UI (`entrypoints/popup/`), and Content Scripts (`entrypoints/*.content.ts`).
+- **WXT Framework (`wxt.dev`)**: Standardized entrypoint structure, automatic MV3 bundling, and `wxt/storage` / `wxt/browser` integration.
+- **Minimal Permissions**: Use `storage`, `activeTab`, `scripting`, and `optional_host_permissions` requested on user action. No `cookies`, no broad `<all_urls>`, no remote code.
+- **Privacy & Security**: Zero credential/cookie scraping; user-initiated actions only; sanitize all extracted DOM strings.
+- **Explicit Failure**: Selector mismatch, structure drift, or count discrepancies must trigger explicit error codes (no fake partial success).
 
-Example shape (paths are build outputs):
+---
 
-```json
-{
-  "manifest_version": 3,
-  "name": "import2gmap",
-  "version": "0.1.0",
-  "background": { "service_worker": "background.js", "type": "module" },
-  "action": { "default_popup": "popup.html" },
-  "permissions": ["storage", "activeTab", "scripting"],
-  "optional_host_permissions": [
-    "https://tabelog.com/*",
-    "https://www.google.com/maps/*"
-  ]
-}
-```
+## 2. UX & Data Flow (v1)
 
-## TypeScript project layout (suggested)
+- **Entry Point**: Action popup only (no in-page Floating UI / injected buttons on Tabelog).
+- **Stepped Flow**: `ready` → `extracting` → `extract_complete` → (Next) `confirm` → `import_starting`.
+- **Confirm Screen**: Unique shop count + unique collection catalog count + user-editable map name (default `食べログ保存リスト YYYY-MM-DD`).
+- **Data Handoff**: `chrome.storage.session` via WXT `storage` API (`session:import2gmap`).
+- **KML Generation**: In-memory OGC KML 2.2 string/Blob generation at import time; no disk export UI in v1.
+- **Progress & Cancel**: Supports progress updates and cancellation during pager crawl; supports explicit error code displays and step retries.
 
-```text
-src/
-  background/     # service worker entry
-  content/        # site adapters (Tabelog extract, My Maps import)
-  popup/          # stepped UI: extract → confirm → import
-  domain/         # pure TS (shops, sanitizers, KML) — no chrome/DOM
-  messaging/      # shared message union + guards
-dist/             # bundled outputs referenced by manifest
-manifest.json
-```
+---
 
-- Toolchain: **npm + Vite + Vitest** (ADR-0004).
-- One bundler entry per context (worker, each content script, popup).
-- Domain code is imported by content/background but never imports them.
+## 3. Implementation Baselines (ADRs)
 
-## UX & data (v1)
-
-- Popup-only entry (no in-page extract chrome). See `docs/reference/extension-ui-specifications.md`.
-- Flow: ready → extracting → **extract_complete** → (Next) confirm → Import start.
-- Confirm: shop count + collection count + editable map name (default `食べログ保存リスト YYYY-MM-DD`).
-- Extract results in `chrome.storage.session`; KML built in memory at import.
-- Progress + cancel during pager crawl; explicit error codes + retry.
-
-## Context responsibilities
-
-| Context | Does | Does not |
-| :--- | :--- | :--- |
-| Service worker | Orchestrate flows, session storage, tab targeting, message hub | Touch page DOM |
-| Content script | DOM read/write on allowed hosts after injection | Hold long-lived secrets |
-| Popup | User intent, confirm, status | Assume tab DOM without messaging |
-
-## Messaging & errors
-
-- Typed message union (`typescript-webextension`): start / progress / result / error / cancel.
-- Selector/UI mismatch → typed error; no silent partial success for a “full list” import.
-- Bounded waits/timeouts; My Maps import blocked until spike pass criteria in ADR-0004.
-
-## Security
-
-- Sanitize extracted strings before KML/UI.
-- Validate URLs with allowlists.
-- No `cookies` API; no `<all_urls>`.
-
-## Local dev loop
-
-1. `npm run build` (or watch) → `dist/`
-2. `chrome://extensions` → Load unpacked → folder with `manifest.json`
-3. Reload extension after rebuild; re-inject / refresh target tabs as needed
-
-## Related skills
-
-- `typescript-webextension` — TS/strict typing/messages
-- `tdd-webextension` — Canon TDD
-- `web-scraping-dom-parsing` — Tabelog PC list extract
-- `google-my-maps-web-import` — My Maps Web UI import
-- `gis-kml-conversion` — KML generation
+- [ADR-0003](file:///home/sthin/work/import2gmap/docs/explanation/adr/0003-chrome-extension-my-maps-web-import.md): MV3 desktop extension, extract fields, in-memory KML, My Maps Web UI import, privacy first.
+- [ADR-0004](file:///home/sthin/work/import2gmap/docs/explanation/adr/0004-extension-implementation-baseline.md): Minimal permissions, stepped UX, WXT + Vitest toolchain, session storage, My Maps feasibility gate.
+- [ADR-0005](file:///home/sthin/work/import2gmap/docs/explanation/adr/0005-extract-collections-for-future-pin-styling.md): Extract collections/labels now into structured model; pin colors deferred.
+- [ADR-0006](file:///home/sthin/work/import2gmap/docs/explanation/adr/0006-wxt-framework-adoption.md): WXT framework adoption for development, bundling, and testing.
