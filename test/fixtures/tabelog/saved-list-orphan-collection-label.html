@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>テストユーザーさんの保存リストのお店 [食べログ]</title>
+</head>
+<body>
+  <div class="js-rvwr-list-main">
+    <div class="search-condition--hozon">
+      <span class="search-condition__title">保存リスト</span>
+    </div>
+
+    <div id="js-bookmark-list-view" data-list-view="hozon">
+      <div class="js-bookmark" data-rst-id="10000001">
+        <div class="rvw-item js-rvw-item">
+          <div class="simple-rvw">
+            <a class="simple-rvw__rst-name-target" href="https://tabelog.com/tokyo/A1301/A130101/10000001/">テスト店舗1</a>
+            <textarea class="rst-info-copy__item-txt js-rst-info-copy__item-txt">テスト店舗1&#10;03-1234-5678&#10;東京都中央区銀座1-2-3&#10;https://tabelog.com/tokyo/A1301/A130101/10000001/</textarea>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Catalog only lists id 101; id 102 is an orphan label seen only on a shop -->
+  <div id="js-collection" data-collection-attributes='[{"label_id":101,"title":"行きたいお店"}]'></div>
+  <div id="js-bookmarks-data" data-bookmarks='{"10000001":{"labels":[{"id":101,"title":"行きたいお店"},{"id":102,"title":"限定コレクション"}]}}'></div>
+</body>
+</html>

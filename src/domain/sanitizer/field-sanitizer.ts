@@ -60,7 +60,7 @@ function stripControlChars(text: string): string {
   return text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
 }
 
-export function sanitizePlainText(raw: string, maxLength: number): string {
+export function sanitizePlainText(raw: string): string {
   let text = raw.normalize('NFKC');
   text = stripHtmlTags(text);
   text = decodeHtmlEntitiesOnce(text);
@@ -69,6 +69,17 @@ export function sanitizePlainText(raw: string, maxLength: number): string {
   }
   text = stripDangerousSubstrings(text);
   text = stripControlChars(text);
-  text = text.replace(/\s+/g, ' ').trim();
+  return text.replace(/\s+/g, ' ').trim();
+}
+
+export function truncate(text: string, maxLength: number): string {
   return text.length > maxLength ? text.slice(0, maxLength) : text;
+}
+
+export function sanitizeCollectionId(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed || /["'<>\s]/.test(trimmed)) {
+    return '';
+  }
+  return truncate(trimmed, MAX_LENGTHS.collectionId);
 }

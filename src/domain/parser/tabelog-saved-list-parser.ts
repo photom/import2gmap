@@ -1,28 +1,74 @@
 import { ExtractionError } from '../errors/extraction-error';
-import { MAX_LENGTHS, sanitizePlainText } from '../sanitizer/field-sanitizer';
+import { MAX_LENGTHS, sanitizePlainText, truncate } from '../sanitizer/field-sanitizer';
 import { sanitizeShopUrl } from '../sanitizer/url-sanitizer';
 import { parseAddress } from './address-parser';
-import type { ExtractedShop } from '../models/extracted-shop';
+import { parseBookmarksData } from './bookmarks-data-parser';
+import { parseCollectionCatalog } from './collection-catalog-parser';
+import type { CollectionRef, ExtractedSavedList, ExtractedShop } from '../models/extracted-shop';
 
 export class TabelogSavedListParser {
-  extractShop(root: Element): ExtractedShop {
+  extractPage(document: Document): ExtractedSavedList {
+    this.detectSavedListPage(document);
+
+    const bookmarksByRstId = parseBookmarksData(document);
+    const catalog = parseCollectionCatalog(document);
+    const catalogIds = new Set(catalog.map((entry) => entry.id));
+    const orphanCollections: CollectionRef[] = [];
+
+    const itemRoots = Array.from(document.querySelectorAll('div.js-bookmark'));
+    if (itemRoots.length === 0) {
+      throw new ExtractionError('EmptyList');
+    }
+
+    const shops = itemRoots.map((root) => {
+      const rstId = root.getAttribute('data-rst-id') ?? '';
+      const collections = bookmarksByRstId[rstId] ?? [];
+      for (const collection of collections) {
+        if (!catalogIds.has(collection.id)) {
+          catalogIds.add(collection.id);
+          orphanCollections.push(collection);
+        }
+      }
+      return this.extractShop(root, collections);
+    });
+
+    return {
+      shops,
+      collectionsCatalog: [...catalog, ...orphanCollections],
+    };
+  }
+
+  extractShop(root: Element, collections: readonly CollectionRef[] = []): ExtractedShop {
     const nameEl = root.querySelector('a.simple-rvw__rst-name-target');
     if (!nameEl) {
       throw new ExtractionError('SelectorDrift');
     }
-    const name = sanitizePlainText(nameEl.textContent ?? '', MAX_LENGTHS.name);
-    if (!name) {
+    const fullName = sanitizePlainText(nameEl.textContent ?? '');
+    if (!fullName) {
       throw new ExtractionError('ItemNameMissing');
     }
+    const name = truncate(fullName, MAX_LENGTHS.name);
 
     const url = this.extractUrl(root, nameEl);
+
+    const textareaEl = root.querySelector<HTMLTextAreaElement>(
+      'textarea.rst-info-copy__item-txt.js-rst-info-copy__item-txt',
+    );
+    if (!textareaEl) {
+      throw new ExtractionError('AddressMissing');
+    }
+    const address = parseAddress(textareaEl.value, fullName);
+
+    const areaCategoryRaw = root.querySelector('p.simple-rvw__area-catg')?.textContent ?? '';
+    const areaCategory = truncate(sanitizePlainText(areaCategoryRaw), MAX_LENGTHS.areaCategory);
+    const description = areaCategory ? `${url}\n${areaCategory}` : url;
 
     return {
       name,
       url,
-      address: '',
-      description: '',
-      collections: [],
+      address,
+      description,
+      collections,
     };
   }
 
@@ -37,6 +83,21 @@ export class TabelogSavedListParser {
     }
 
     return sanitizeShopUrl(candidate);
+  }
+
+  parsePageCount(document: Document): { from: number; to: number; total: number } | undefined {
+    const nums = Array.from(document.querySelectorAll('.c-page-count .c-page-count__num strong')).map(
+      (el) => Number.parseInt(el.textContent ?? '', 10),
+    );
+    if (nums.length !== 3 || nums.some((n) => Number.isNaN(n))) {
+      return undefined;
+    }
+    const [from, to, total] = nums;
+    return { from, to, total };
+  }
+
+  hasNextPage(document: Document): boolean {
+    return document.querySelector('a.c-pagination__arrow.c-pagination__arrow--next[rel="next"]') !== null;
   }
 
   detectSavedListPage(document: Document): boolean {

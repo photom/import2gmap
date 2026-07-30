@@ -8,7 +8,8 @@ export type ExtractionErrorCode =
   | 'CollectionCatalogInvalid'
   | 'SelectorDrift'
   | 'IncompleteCrawl'
-  | 'EmptyList';
+  | 'EmptyList'
+  | 'SessionCorrupt';
 
 export class ExtractionError extends Error {
   constructor(

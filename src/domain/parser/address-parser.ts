@@ -1,5 +1,5 @@
 import { ExtractionError } from '../errors/extraction-error';
-import { MAX_LENGTHS, sanitizePlainText } from '../sanitizer/field-sanitizer';
+import { MAX_LENGTHS, sanitizePlainText, truncate } from '../sanitizer/field-sanitizer';
 import { sanitizeShopUrl } from '../sanitizer/url-sanitizer';
 
 const PHONE_LINE_PATTERN = /^[0-9０-９+\-−ー()（）\s]+$/;
@@ -34,7 +34,7 @@ export function parseAddress(rawTextareaValue: string, sanitizedName: string): s
     return true;
   });
 
-  const address = sanitizePlainText(addressLines.join(' '), MAX_LENGTHS.address);
+  const address = truncate(sanitizePlainText(addressLines.join(' ')), MAX_LENGTHS.address);
   if (!address) {
     throw new ExtractionError('AddressMissing');
   }

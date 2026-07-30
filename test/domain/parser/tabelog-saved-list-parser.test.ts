@@ -85,4 +85,41 @@ describe('TabelogSavedListParser#extractShop', () => {
 
     expect(shop.address).toBe('東京都中央区銀座1-2-7 テストビル3F');
   });
+
+  it('extracts the optional areaCategory and assembles description as url then areaCategory', () => {
+    const doc = loadFixtureDocument('saved-list-single-page.html');
+    const root = doc.querySelector('div.js-bookmark')!;
+    const parser = new TabelogSavedListParser();
+
+    const shop = parser.extractShop(root);
+
+    expect(shop.description).toBe(
+      'https://tabelog.com/tokyo/A1301/A130101/10000001/\n銀座 / 居酒屋',
+    );
+  });
+
+  it('omits areaCategory from description when the element is absent', () => {
+    const doc = loadFixtureDocument('saved-list-no-area-category.html');
+    const root = doc.querySelector('div.js-bookmark')!;
+    const parser = new TabelogSavedListParser();
+
+    const shop = parser.extractShop(root);
+
+    expect(shop.description).toBe('https://tabelog.com/tokyo/A1301/A130101/10000008/');
+  });
+
+  it('truncates name, address, and areaCategory to their maximum allowed lengths', () => {
+    const doc = loadFixtureDocument('saved-list-long-fields.html');
+    const root = doc.querySelector('div.js-bookmark')!;
+    const parser = new TabelogSavedListParser();
+
+    const shop = parser.extractShop(root);
+
+    expect(shop.name).toHaveLength(200);
+    expect(shop.name).toBe('あ'.repeat(200));
+    expect(shop.address).toHaveLength(400);
+    expect(shop.address).toBe('う'.repeat(400));
+    expect(shop.description).toContain('え'.repeat(300));
+    expect(shop.description).not.toContain('え'.repeat(301));
+  });
 });
