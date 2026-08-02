@@ -56,8 +56,8 @@ describe('KmlBuilder#build', () => {
     const placemarks = doc.querySelectorAll('Placemark');
 
     expect(placemarks).toHaveLength(2);
-    expect(placemarks[0].querySelector('name')?.textContent).toBe('テスト店舗1');
-    expect(placemarks[1].querySelector('name')?.textContent).toBe('テスト&店舗2');
+    expect(placemarks[0]!.querySelector('name')?.textContent).toBe('テスト店舗1');
+    expect(placemarks[1]!.querySelector('name')?.textContent).toBe('テスト&店舗2');
   });
 
   it('places sanitized shop name in name and sanitized address in address', () => {

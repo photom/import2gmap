@@ -13,7 +13,7 @@ ADR-0006 adopted WXT as the extension development and testing framework but did 
 
 - Popup UI is a step-driven state machine (`UiStateReducer`, Module 4 of the [Phase 1 test plan](../../reference/test-plan-phase1.md)); a component model that re-renders from state is a better fit than manual DOM manipulation.
 - Minimize custom build wiring by using WXT's official module system (`modules: ['@wxt-dev/module-react']` in `wxt.config.ts`) rather than a hand-rolled Vite React setup.
-- Keep the popup a thin presentation layer: it must consume `src/application/ui-state-store.ts` and domain types without embedding business logic in components (per `ddd-architecture` skill).
+- Keep the popup a thin presentation layer: it must consume `src/application/ui-state-reducer.ts` and domain types without embedding business logic in components (per `ddd-architecture` skill).
 - Avoid introducing a heavier framework (Vue, Svelte) with no other justification in this codebase.
 
 ## Considered Options
@@ -30,5 +30,5 @@ ADR-0006 adopted WXT as the extension development and testing framework but did 
 
 ## Consequences
 
-- **Positive**: Zero extra build wiring (module handles Vite/JSX/HMR); popup components can subscribe directly to `UiStateStore` output and re-render per step; consistent with WXT-recommended project conventions.
+- **Positive**: Zero extra build wiring (module handles Vite/JSX/HMR); popup components can subscribe directly to `ui-state-reducer.ts` output and re-render per step; consistent with WXT-recommended project conventions.
 - **Trade-offs**: Adds `react` / `react-dom` as popup-only runtime dependencies and a small bundle-size cost versus vanilla DOM; popup components must still delegate all business logic to `src/application` / `src/domain` and stay presentation-only to preserve the Clean Architecture boundary.

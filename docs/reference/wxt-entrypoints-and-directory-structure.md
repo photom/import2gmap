@@ -44,7 +44,7 @@ export default defineConfig({
 | Entrypoint File | WXT Type | Role / Responsibility |
 | :--- | :--- | :--- |
 | `entrypoints/popup/index.html` | Popup HTML | Host markup for Chrome toolbar popup UI |
-| `entrypoints/popup/main.ts` | Popup Script | Mount UI, attach event listeners, send/receive messages to background |
+| `entrypoints/popup/main.tsx` | Popup Script | Mount React UI, attach event listeners, send/receive messages to background |
 | `entrypoints/background.ts` | Service Worker | Orchestrate extract/import jobs, manage WXT session storage, request permissions |
 | `entrypoints/tabelog.content.ts` | Content Script | Run DOM extraction on Tabelog PC saved-list pages (`tabelog.com`) |
 | `entrypoints/mymaps.content.ts` | Content Script | Run Web UI automation on Google My Maps pages (`google.com/maps`) |
@@ -70,6 +70,6 @@ npm run dev
 # Run Vitest unit tests (Canon TDD)
 npm test
 
-# Build production bundle under .output/
+# Build production bundle under output/ (outDir: 'output' in wxt.config.ts)
 npm run build
 ```

@@ -92,8 +92,7 @@ export class TabelogSavedListParser {
     if (nums.length !== 3 || nums.some((n) => Number.isNaN(n))) {
       return undefined;
     }
-    const [from, to, total] = nums;
-    return { from, to, total };
+    return { from: nums[0]!, to: nums[1]!, total: nums[2]! };
   }
 
   hasNextPage(document: Document): boolean {

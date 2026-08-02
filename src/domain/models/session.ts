@@ -8,6 +8,7 @@ export type UiStep =
   | 'extract_complete'
   | 'confirm'
   | 'import_starting'
+  | 'import_succeeded'
   | 'error';
 
 export type ActiveJob = {

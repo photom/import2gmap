@@ -59,7 +59,7 @@ import2gmap/
 ├── entrypoints/                 # WXT Entrypoints (thin adapters)
 │   ├── popup/
 │   │   ├── index.html           # Popup HTML
-│   │   └── main.ts              # Popup UI mount & event listeners
+│   │   └── main.tsx             # Popup UI mount & event listeners (React)
 │   ├── background.ts            # Service worker orchestrator (defineBackground)
 │   ├── tabelog.content.ts       # Tabelog DOM scraper script (defineContentScript)
 │   └── mymaps.content.ts        # My Maps Web UI script (defineContentScript)
@@ -72,7 +72,7 @@ import2gmap/
 │   │   └── errors/              # ExtensionError definitions
 │   ├── application/
 │   │   ├── extract-use-case.ts  # Multi-page crawl orchestration logic
-│   │   ├── ui-state-store.ts    # UI step state machine & reducers
+│   │   ├── ui-state-reducer.ts  # UI step state machine & reducers
 │   │   └── import-use-case.ts   # Prelude / Maps import orchestration
 │   └── infrastructure/
 │       ├── storage/             # WXT Storage wrapper (`wxt/storage`)

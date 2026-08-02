@@ -46,7 +46,7 @@ describe('TabelogSavedListParser#extractShop', () => {
 
   it('rejects a javascript: href with InvalidShopUrl', () => {
     const doc = loadFixtureDocument('saved-list-invalid-url.html');
-    const root = doc.querySelectorAll('div.js-bookmark')[0];
+    const root = doc.querySelectorAll('div.js-bookmark')[0]!;
     const parser = new TabelogSavedListParser();
 
     const error = captureError(() => parser.extractShop(root));
@@ -57,7 +57,7 @@ describe('TabelogSavedListParser#extractShop', () => {
 
   it('rejects a non-Tabelog host href with InvalidShopUrl', () => {
     const doc = loadFixtureDocument('saved-list-invalid-url.html');
-    const root = doc.querySelectorAll('div.js-bookmark')[1];
+    const root = doc.querySelectorAll('div.js-bookmark')[1]!;
     const parser = new TabelogSavedListParser();
 
     const error = captureError(() => parser.extractShop(root));

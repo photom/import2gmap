@@ -31,6 +31,7 @@ ADR-0003 chose a desktop Manifest V3 Chrome extension with TypeScript, PC saved-
 - **Permissions**: `storage`, `activeTab`, `scripting`.
 - **Optional hosts** (request when the user starts extract/import): narrow patterns for Tabelog PC site and Google Maps / My Maps Web UI (e.g. `https://tabelog.com/*`, `https://www.google.com/maps/*`). No `cookies`, no `<all_urls>`, no remote code.
 - **Not in v1**: `downloads` (no KML file export UI).
+- **2026-08-02 addendum (user-approved)**: added `https://docs.google.com/picker*` (path-narrowed, not the whole `docs.google.com` origin) to `optional_host_permissions`. The My Maps KML import dialog turned out to be a cross-origin `docs.google.com/picker` iframe (missed in the original Section 6 spike — see the [spike results addendum](../my-maps-import-spike-results.md)), and `scripting.executeScript` into a frame requires host permission for that frame's origin. Requested together with the existing `https://www.google.com/maps/*` in a single `browser.permissions.request` call at import start. Still no `cookies`, no `downloads`, no Drive API/OAuth — the picker's upload posts directly to My Maps, not a Drive API call.
 
 ### 2. UX flow & tab premise
 
@@ -67,6 +68,8 @@ Spike passes only if all of the following are demonstrated with sanitized fixtur
 3. Feed in-memory KML into the import UI (e.g. file input / Blob) and observe a bounded success signal.
 4. Any unexpected DOM/UI → `MyMapsUiChanged` (or equivalent) within timeouts; no silent partial import marked success.
 5. Short written note on Chrome Web Store / target-site policy risk attached to the spike outcome.
+
+**Spike outcome**: Passed 2026-08-02. See [My Maps import spike results](../my-maps-import-spike-results.md) for selectors, detection rules, and the policy note.
 
 ## Consequences
 

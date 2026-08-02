@@ -9,6 +9,7 @@ const VALID_UI_STEPS: readonly UiStep[] = [
   'extract_complete',
   'confirm',
   'import_starting',
+  'import_succeeded',
   'error',
 ];
 

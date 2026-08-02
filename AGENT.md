@@ -47,3 +47,11 @@ Do not reintroduce Android/Gradle app code, Drive API/OAuth token flows, or alwa
 - **Prioritize Simplicity**: Strive for **concise, straightforward, and readable** code implementations. Avoid over-engineering, unnecessary abstractions, or overly clever trickery.
 - **Clear Intent & Naming**: Use self-explanatory naming for domain models, state variables, and functions so that the codebase remains easy to follow and maintain.
 - **Focused Responsibilities**: Keep functions, domain classes, and extension UI components short, modular, and focused on a single responsibility.
+
+---
+
+## 5. ADR Deviation Consultation
+
+- If, during implementation, an agent identifies a design that contradicts an already-accepted ADR under `docs/explanation/adr/` and believes it is superior to the documented decision, the agent **MUST NOT** silently implement the deviation.
+- Instead, the agent **MUST stop and consult the user**: present the conflict (what the ADR says vs. the proposed alternative and why it seems better), and let the user decide whether to (a) find an implementation compliant with the existing ADR, (b) accept a scoped exception, or (c) revise/supersede the ADR.
+- This does **not** apply to implementation choices that are compliant with an ADR's intent — e.g., fixing tooling/framework behavior that accidentally violates an ADR (such as removing an unintended always-on host permission to actually match ADR-0004's optional-permissions decision) is a bug fix toward the ADR, not a deviation, and does not require consultation.

@@ -11,8 +11,8 @@ describe('TabelogSavedListParser#extractPage collections', () => {
 
     const page = parser.extractPage(doc);
 
-    expect(page.shops[0].collections).toEqual([{ id: '101', name: '行きたいお店' }]);
-    expect(page.shops[1].collections).toEqual([
+    expect(page.shops[0]!.collections).toEqual([{ id: '101', name: '行きたいお店' }]);
+    expect(page.shops[1]!.collections).toEqual([
       { id: '101', name: '行きたいお店' },
       { id: '102', name: 'お気に入り' },
     ]);

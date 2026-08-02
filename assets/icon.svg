@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- Google Maps style pin -->
+  <path d="M256 32
+           C154 32 80 106 80 206
+           C80 330 256 480 256 480
+           C256 480 432 330 432 206
+           C432 106 358 32 256 32 Z"
+        fill="#EA4335"/>
+  <!-- inner white circle -->
+  <circle cx="256" cy="204" r="96" fill="#FFFFFF"/>
+  <!-- fork (left) -->
+  <g fill="#F2A900">
+    <rect x="192" y="148" width="9" height="46" rx="4"/>
+    <rect x="208" y="148" width="9" height="46" rx="4"/>
+    <rect x="224" y="148" width="9" height="46" rx="4"/>
+    <path d="M188 186 h49 v10 c0 16 -11 27 -24.5 27 c-13.5 0 -24.5 -11 -24.5 -27 Z"/>
+    <rect x="207" y="215" width="11" height="48" rx="5"/>
+  </g>
+  <!-- spoon (right) -->
+  <g fill="#F2A900">
+    <ellipse cx="302" cy="172" rx="25" ry="32"/>
+    <rect x="296" y="198" width="12" height="65" rx="5"/>
+  </g>
+</svg>

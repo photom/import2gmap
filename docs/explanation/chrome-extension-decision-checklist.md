@@ -21,8 +21,8 @@ Inventory of product and engineering decisions for the Manifest V3 + TypeScript 
 | Error catalog | Stable codes + Japanese UI strings | [error codes](../reference/extension-error-codes.md) |
 | KML schema | Placemark + URL-first description; no collection styles in v1 | [kml-data-schema](../reference/kml-data-schema.md) |
 | Privacy model | No cookies/tokens/phones/memos | [security-privacy](security-privacy-model.md) |
-| Test fixtures & plan | Sanitized HTML under `test/fixtures/tabelog/` + Phase 1 Test Plan | [html-fixture-policy](../reference/html-fixture-policy.md), [test plan](../reference/test-plan-phase1.md) |
-| My Maps spike gate | See ADR-0004 | [ADR-0004](adr/0004-extension-implementation-baseline.md) |
+| Test fixtures & plan | Sanitized HTML under `test/fixtures/tabelog/` + Phase 1 (domain) / Phase 2 (entrypoint wiring) Test Plans | [html-fixture-policy](../reference/html-fixture-policy.md), [Phase 1 plan](../reference/test-plan-phase1.md), [Phase 2 plan](../reference/test-plan-phase2.md) |
+| My Maps spike gate | **Passed** (2026-08-02) — selectors, success/failure detection, and policy note recorded. **Addendum same day**: the KML upload dialog is a cross-origin `docs.google.com/picker` iframe (missed in the original pass); worker now sequences messages across two frames and requests one additional narrow permission (`https://docs.google.com/picker*`) | [ADR-0004](adr/0004-extension-implementation-baseline.md), [spike results](my-maps-import-spike-results.md) |
 
 ## Flow (accepted architecture)
 
@@ -39,7 +39,7 @@ flowchart LR
 
 | Topic | Current default (until revised) |
 | :--- | :--- |
-| Chrome Web Store listing | Deferred; develop via Load unpacked first |
+| Chrome Web Store listing | Deferred; develop via Load unpacked first. Options, prerequisites, and the policy risk that must be reviewed before closing this item are laid out in [distribute-extension](../how-to/distribute-extension.md) |
 | Playwright / browser E2E | Deferred; Vitest + sanitized HTML fixtures first |
 | KML user download | Not in v1 (memory → My Maps only) |
 | Import into existing map | Not in v1 (spike targets **new map** only) |

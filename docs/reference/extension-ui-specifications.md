@@ -39,6 +39,8 @@ When the popup opens, the service worker (or popup via messaging) evaluates the 
 
 Detection failure must not scrape the page.
 
+**Implementation note (no injection on popup open)**: this context check uses only `tab.url` pattern matching — host `tabelog.com`/`www.tabelog.com` and path `/rvwr/{rvwrId}/hozon_restaurants/list` ([extraction spec §2](tabelog-pc-saved-list-extraction-spec.md), steps 1–2). It does **not** inject a content script or read page DOM chrome (steps 3–4 of that section) just to render the popup. The full DOM chrome check remains the content script's job at extract time; a URL match that turns out not to be a real saved-list page fails there with `NotSavedListPage` (see [error codes](extension-error-codes.md)).
+
 ---
 
 ## 3. Screens & Elements
@@ -114,6 +116,17 @@ Entered after **My Maps へインポート**.
 
 Detailed My Maps step UI (progress inside Maps) may replace this screen in a later spec; v1 only requires this gate + handoff.
 
+### 3.6b `import_succeeded` — インポート完了
+
+Entered once the My Maps content script confirms the KML import succeeded (see [messaging protocol §6](extension-messaging-protocol.md#6-service-worker--my-maps-content-script)).
+
+| Element | Type | Rules |
+| :--- | :--- | :--- |
+| Result | text | 例:「{mapName} に {shopCount} 件の店舗をインポートしました」 |
+| **完了** | primary button | Sends `EXTRACT_DISCARD`; clears the session extract payload and returns to `ready` |
+
+The My Maps document itself is renamed to `mapName` as part of the import automation, before the KML import step runs (see [messaging protocol §6](extension-messaging-protocol.md#6-service-worker--my-maps-content-script) and [spike results §2b](../explanation/my-maps-import-spike-results.md)) — the map does **not** keep Google's default title after a successful import. A rename failure is treated as an explicit import failure (`error` screen), not a silent partial success, since this screen's text asserts the map name.
+
 ### 3.7 `error` — エラー
 
 | Element | Type | Rules |
@@ -139,8 +152,10 @@ extracting -- failure --> error
 extract_complete --[次へ]--> confirm
 extract_complete --[やり直す]--> ready
 confirm --[戻る]--> extract_complete
-confirm --[My Maps へインポート]--> import_starting → (My Maps flow / later spec)
+confirm --[My Maps へインポート]--> import_starting
+import_starting -- success --> import_succeeded
 import_starting -- failure --> error
+import_succeeded --[完了]--> ready
 error --[再試行]--> ready | extracting | import_starting  // depending on failed step
 ```
 
@@ -157,7 +172,9 @@ stateDiagram-v2
   extract_complete --> ready: RetryExtract
   confirm --> extract_complete: Back
   confirm --> import_starting: Import
+  import_starting --> import_succeeded: success
   import_starting --> error: failure
+  import_succeeded --> ready: Done
   error --> ready: RetryExtractStep
   error --> import_starting: RetryImportStep
 ```
@@ -172,9 +189,9 @@ On **My Maps へインポート**:
 2. Persist map name with session extract payload.
 3. Request My Maps optional host permission if not granted → deny → `error(HostPermissionDenied)`.
 4. Open or focus a My Maps Web UI tab suitable for **new map** creation (exact URL is an implementation detail; must not require the extension to handle Google login UI).
-5. Hand off to My Maps content-script automation (spike-gated). Popup shows `import_starting` until a later UI spec defines success/failure screens for Maps.
+5. Hand off to My Maps content-script automation. Popup shows `import_starting` while the worker drives the Maps tab, then `import_succeeded` (Section 3.6b) or `error` once the automation reports its result.
 
-This document does **not** specify Maps DOM selectors.
+This document does **not** specify Maps DOM selectors — see [spike results](../explanation/my-maps-import-spike-results.md) for those.
 
 ---
 

@@ -31,6 +31,12 @@ export class SessionStorageManager {
     await storage.setItem(SESSION_KEY, next);
   }
 
+  async patch(partial: Partial<SessionRoot>): Promise<void> {
+    const current = await this.read();
+    const next: SessionRoot = { ...current, ...partial };
+    await storage.setItem(SESSION_KEY, next);
+  }
+
   async discard(): Promise<void> {
     const current = await this.read();
     const next: SessionRoot = {

@@ -49,6 +49,41 @@ describe('SessionStorageManager', () => {
     expect((error as ExtractionError).code).toBe('SessionCorrupt');
   });
 
+  it('merges a partial patch into the current session and persists it', async () => {
+    await storage.setItem(SESSION_KEY, {
+      schemaVersion: 1,
+      uiStep: 'ready',
+      mapName: 'マイマップ',
+    });
+    const manager = new SessionStorageManager();
+
+    await manager.patch({
+      uiStep: 'extracting',
+      activeJob: { jobId: 'job-1', kind: 'extract', startedAt: 1 },
+    });
+
+    const raw = await storage.getItem<Record<string, unknown>>(SESSION_KEY);
+    expect(raw?.uiStep).toBe('extracting');
+    expect(raw?.mapName).toBe('マイマップ');
+    expect(raw?.activeJob).toEqual({ jobId: 'job-1', kind: 'extract', startedAt: 1 });
+  });
+
+  it('clears a field when the patch explicitly sets it to undefined', async () => {
+    await storage.setItem(SESSION_KEY, {
+      schemaVersion: 1,
+      uiStep: 'error',
+      mapName: 'マイマップ',
+      lastError: { code: 'IncompleteCrawl', message: 'x', retryStep: 'extract', at: 1 },
+    });
+    const manager = new SessionStorageManager();
+
+    await manager.patch({ uiStep: 'ready', lastError: undefined });
+
+    const raw = await storage.getItem<Record<string, unknown>>(SESSION_KEY);
+    expect(raw?.uiStep).toBe('ready');
+    expect(raw?.lastError).toBeUndefined();
+  });
+
   it('clears activeJob and extractResult on discard', async () => {
     await storage.setItem(SESSION_KEY, {
       schemaVersion: 1,

@@ -41,6 +41,7 @@ type UiStep =
   | "extract_complete"
   | "confirm"
   | "import_starting"
+  | "import_succeeded"
   | "error";
 ```
 
@@ -140,7 +141,8 @@ Kept so popup reopen on `error` can show the same code/message. Cleared on succe
 | Extract success | `extract_complete` |
 | User **次へ** | `confirm` |
 | User **戻る** | `extract_complete` |
-| Import prelude | `import_starting` |
+| Import prelude / automation running | `import_starting` |
+| Import automation succeeded | `import_succeeded` |
 | Failure | `error` |
 | Discard / cancel to idle | `ready` (or wrong_* on next open) |
 

@@ -8,6 +8,9 @@ dist/
 build/
 .vite/
 coverage/
+.wxt/
+output/
+.output/
 
 # Logs & temporary files
 *.log
