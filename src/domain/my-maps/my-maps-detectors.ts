@@ -31,3 +31,16 @@ export function detectMapsFrameRole(hostname: string): MapsFrameRole {
 export function hasMapTitleApplied(currentTitle: string, expectedTitle: string): boolean {
   return currentTitle.trim() === expectedTitle.trim();
 }
+
+const PICKER_UPLOAD_NAV_LABELS = new Set(['アップロード', 'Upload']);
+
+// The `docs.google.com/picker` iframe has a second observed layout ("picker v2", `data-config`
+// containing `"https://docs.google.com/picker/v2/"`): instead of opening directly on the upload
+// pane, it renders a left source-nav listbox (`Google ドライブ` / `アルバム` / `アップロード`)
+// with Drive preselected, and the file input doesn't exist in the DOM until `アップロード` is
+// clicked — see spike results §3 (2026-08-04 addendum). Exact trimmed match, not substring, so a
+// label like `アップロード履歴` doesn't false-positive; `Upload` is also accepted since Google
+// mixes English into the JA UI elsewhere too (see `DRIVE_CONSENT_TEXT = 'CREATE'`).
+export function isPickerUploadNavLabel(text: string): boolean {
+  return PICKER_UPLOAD_NAV_LABELS.has(text.trim());
+}

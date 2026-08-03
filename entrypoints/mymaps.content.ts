@@ -4,6 +4,7 @@ import {
   hasImportSucceeded,
   hasMapTitleApplied,
   isLoggedOutRedirect,
+  isPickerUploadNavLabel,
 } from '@/src/domain/my-maps/my-maps-detectors';
 import { isWorkerToMapsMessage } from '@/src/domain/messaging/message-types';
 import type { JobId, MapsOutcome, MapsToWorkerMessage } from '@/src/domain/messaging/message-types';
@@ -16,6 +17,16 @@ const MAP_TITLE_DIALOG_INPUT_SELECTOR = '#update-map input[type="text"]';
 const MAP_TITLE_DIALOG_SAVE_SELECTOR = '#update-map button[name="save"]';
 const IMPORT_LINK_SELECTOR = '#ly0-layerview-import-link';
 const FILE_INPUT_SELECTOR = 'input[type="file"][accept*="KML"]';
+// Fallback for the picker v2 source-nav layout's upload pane: its own file input markup was never
+// directly observed (only the enclosing dialog's `data-sources` config, which lists the same
+// `.KML`-inclusive `fileExts` as layout 1), so this is a defensive, unconfirmed fallback — see
+// spike results §3 (2026-08-04 addendum). It cannot cause a silent wrong result: an incompatible
+// input still surfaces as the bounded MAPS_AWAIT_IMPORT_RESULT timeout → explicit MyMapsUiChanged.
+const FILE_INPUT_FALLBACK_SELECTOR = 'input[type="file"]';
+// `jsname="Co88hf"` is an optional narrowing hint for the picker's source-nav options, never the
+// sole anchor (it's undocumented and could churn); the real identifier is the option's own text.
+const PICKER_NAV_OPTION_HINT_SELECTOR = 'div[role="option"][jsname="Co88hf"]';
+const PICKER_NAV_OPTION_SELECTOR = 'div[role="option"]';
 const LAYER_TITLE_SELECTOR = '#ly0-layer-header .pbTTYe-r4nke';
 const DEFAULT_LAYER_TITLE = '無題のレイヤ';
 const PREPARE_TIMEOUT_MS = 15_000;
@@ -174,10 +185,69 @@ async function handleOpenImportDialog(jobId: JobId): Promise<MapsToWorkerMessage
   return { type: 'MAPS_OPEN_IMPORT_DIALOG_RESULT', protocolVersion: 1, jobId, ok: true };
 }
 
+// Picker frame only. Mirrors findDriveConsentCreateButton's shape: an attribute-ish query first
+// (the jsname hint, which narrows but is not the sole anchor), falling back to the bare
+// `role="option"` query, then text-matching over whichever candidate set that produced — never
+// anchored on position (`name="N"` is a source index that shifts per-account) or hashed classes
+// (churn across Google deploys). See spike results §3 (2026-08-04 addendum, picker v2).
+function findPickerUploadNavOption(): HTMLElement | null {
+  const hinted = document.querySelectorAll<HTMLElement>(PICKER_NAV_OPTION_HINT_SELECTOR);
+  const candidates = hinted.length > 0 ? hinted : document.querySelectorAll<HTMLElement>(PICKER_NAV_OPTION_SELECTOR);
+  for (const option of candidates) {
+    if (isPickerUploadNavLabel(option.textContent ?? '')) return option;
+  }
+  return null;
+}
+
+function findKmlFileInput(): HTMLInputElement | null {
+  return (
+    document.querySelector<HTMLInputElement>(FILE_INPUT_SELECTOR) ??
+    document.querySelector<HTMLInputElement>(FILE_INPUT_FALLBACK_SELECTOR)
+  );
+}
+
+async function waitForKmlFileInput(timeoutMs: number): Promise<HTMLInputElement | null> {
+  let fileInput: HTMLInputElement | null = null;
+  await pollUntil(() => {
+    fileInput = findKmlFileInput();
+    return fileInput !== null;
+  }, timeoutMs);
+  return fileInput;
+}
+
 // Picker frame only (docs.google.com/picker). This is the only frame where the KML file input
-// actually exists — see spike results "cross-origin picker iframe".
+// actually exists — see spike results "cross-origin picker iframe". Two layouts are possible (see
+// spike results §3, 2026-08-04 addendum): layout 1 has the upload pane (and file input) present
+// immediately; picker v2 instead renders a source-nav listbox and the upload pane doesn't exist in
+// the DOM until "アップロード"/"Upload" is clicked. The picker frame may also still be loading
+// when this message arrives, so neither may exist yet — hence the bounded poll for *either* below,
+// rather than an arbitrary short pre-check timeout.
 async function handleFeedKml(jobId: JobId, kml: string, fileName: string): Promise<MapsToWorkerMessage> {
-  const fileInput = await waitForElement<HTMLInputElement>(FILE_INPUT_SELECTOR, PREPARE_TIMEOUT_MS);
+  let fileInput = findKmlFileInput();
+
+  if (!fileInput) {
+    const fileInputOrNavReady = await pollUntil(
+      () => findKmlFileInput() !== null || findPickerUploadNavOption() !== null,
+      PREPARE_TIMEOUT_MS,
+    );
+    if (!fileInputOrNavReady) {
+      return { type: 'MAPS_FEED_KML_RESULT', protocolVersion: 1, jobId, ok: false, code: 'MyMapsUiChanged' };
+    }
+
+    fileInput = findKmlFileInput();
+    if (!fileInput) {
+      // Layout is picker v2: the upload pane isn't rendered yet, only the source-nav listbox is.
+      // Clicking it is the correct recovery (the picker's own `data-sources` config still enables
+      // the upload source with the same `.KML` fileExts — only the default selection differs),
+      // never done when the file input was already present (layout 1) to avoid resetting state.
+      findPickerUploadNavOption()?.click();
+      // The upload pane renders with a lag after the nav click — the fourth recurrence of the
+      // rendering-lag rule (see spike results top-of-doc addenda) — so this is a bounded poll,
+      // never a bare querySelector right after the click.
+      fileInput = await waitForKmlFileInput(PREPARE_TIMEOUT_MS);
+    }
+  }
+
   if (!fileInput) {
     return { type: 'MAPS_FEED_KML_RESULT', protocolVersion: 1, jobId, ok: false, code: 'MyMapsUiChanged' };
   }

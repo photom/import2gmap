@@ -5,6 +5,7 @@ import {
   hasImportSucceeded,
   hasMapTitleApplied,
   isLoggedOutRedirect,
+  isPickerUploadNavLabel,
 } from '../../../src/domain/my-maps/my-maps-detectors';
 
 describe('isLoggedOutRedirect', () => {
@@ -75,5 +76,32 @@ describe('hasMapTitleApplied', () => {
 
   it('returns false when the title bar text is empty (dialog/save still in flight)', () => {
     expect(hasMapTitleApplied('', '食べログ保存リスト 2026-08-02')).toBe(false);
+  });
+});
+
+describe('isPickerUploadNavLabel', () => {
+  it('returns true for the Japanese upload nav option label', () => {
+    expect(isPickerUploadNavLabel('アップロード')).toBe(true);
+  });
+
+  it('returns true after trimming incidental surrounding whitespace', () => {
+    expect(isPickerUploadNavLabel('  アップロード  ')).toBe(true);
+  });
+
+  it('returns true for the English "Upload" label (Google mixes English into the JA UI, same as DRIVE_CONSENT_TEXT)', () => {
+    expect(isPickerUploadNavLabel('Upload')).toBe(true);
+  });
+
+  it('returns false for other source nav options', () => {
+    expect(isPickerUploadNavLabel('Google ドライブ')).toBe(false);
+    expect(isPickerUploadNavLabel('アルバム')).toBe(false);
+  });
+
+  it('returns false for an empty string', () => {
+    expect(isPickerUploadNavLabel('')).toBe(false);
+  });
+
+  it('returns false for text that merely contains the label as a substring (exact trimmed match only)', () => {
+    expect(isPickerUploadNavLabel('アップロード履歴')).toBe(false);
   });
 });
