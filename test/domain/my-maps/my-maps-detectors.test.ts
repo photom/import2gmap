@@ -6,6 +6,7 @@ import {
   hasMapTitleApplied,
   isLoggedOutRedirect,
   isPickerUploadNavLabel,
+  isPickerUploadNavSelected,
 } from '../../../src/domain/my-maps/my-maps-detectors';
 
 describe('isLoggedOutRedirect', () => {
@@ -103,5 +104,19 @@ describe('isPickerUploadNavLabel', () => {
 
   it('returns false for text that merely contains the label as a substring (exact trimmed match only)', () => {
     expect(isPickerUploadNavLabel('アップロード履歴')).toBe(false);
+  });
+});
+
+describe('isPickerUploadNavSelected', () => {
+  it('returns true when aria-selected is the string "true"', () => {
+    expect(isPickerUploadNavSelected('true')).toBe(true);
+  });
+
+  it('returns false when aria-selected is the string "false"', () => {
+    expect(isPickerUploadNavSelected('false')).toBe(false);
+  });
+
+  it('returns false when aria-selected is null (attribute absent / option not found)', () => {
+    expect(isPickerUploadNavSelected(null)).toBe(false);
   });
 });

@@ -5,6 +5,7 @@ import {
   hasMapTitleApplied,
   isLoggedOutRedirect,
   isPickerUploadNavLabel,
+  isPickerUploadNavSelected,
 } from '@/src/domain/my-maps/my-maps-detectors';
 import { isWorkerToMapsMessage } from '@/src/domain/messaging/message-types';
 import type { JobId, MapsOutcome, MapsToWorkerMessage } from '@/src/domain/messaging/message-types';
@@ -20,8 +21,13 @@ const FILE_INPUT_SELECTOR = 'input[type="file"][accept*="KML"]';
 // Fallback for the picker v2 source-nav layout's upload pane: its own file input markup was never
 // directly observed (only the enclosing dialog's `data-sources` config, which lists the same
 // `.KML`-inclusive `fileExts` as layout 1), so this is a defensive, unconfirmed fallback — see
-// spike results §3 (2026-08-04 addendum). It cannot cause a silent wrong result: an incompatible
-// input still surfaces as the bounded MAPS_AWAIT_IMPORT_RESULT timeout → explicit MyMapsUiChanged.
+// spike results §3 (2026-08-04 addendum). It previously doubled as the test for "are we already on
+// the upload pane" in `findKmlFileInput`, which was a bug: the Drive-browsing pane supports
+// drag-and-drop upload (`data-target="itemUploadDrop"` tiles) and can itself contain a stray hidden
+// file input, so that use could match the *wrong* input and make the handler wrongly skip clicking
+// the upload nav — a suspected cause of a field report where the nav stayed `aria-selected="false"`
+// and the import stalled (spike results §3, 2026-08-04 second addendum). It must now only be
+// reached once the upload pane is confirmed active — see `findKmlFileInputWithFallback` below.
 const FILE_INPUT_FALLBACK_SELECTOR = 'input[type="file"]';
 // `jsname="Co88hf"` is an optional narrowing hint for the picker's source-nav options, never the
 // sole anchor (it's undocumented and could churn); the real identifier is the option's own text.
@@ -34,6 +40,11 @@ const DRIVE_CONSENT_TIMEOUT_MS = 5_000;
 const IMPORT_TIMEOUT_MS = 30_000;
 const MAP_TITLE_APPLY_TIMEOUT_MS = 15_000;
 const POLL_INTERVAL_MS = 300;
+// Bound for each individual upload-nav activation strategy in `activateUploadPaneNav` below — kept
+// short (rather than reusing PREPARE_TIMEOUT_MS) so escalating through the ordered list of
+// strategies doesn't itself take unreasonably long; a real activation should take effect almost
+// immediately if it's going to at all.
+const ACTIVATION_STEP_TIMEOUT_MS = 1_000;
 
 // The worker discovers the picker iframe's frameId by repeatedly re-injecting this script with
 // `allFrames: true` (see `waitForPickerFrame` in entrypoints/background.ts) until an injection
@@ -199,55 +210,117 @@ function findPickerUploadNavOption(): HTMLElement | null {
   return null;
 }
 
-function findKmlFileInput(): HTMLInputElement | null {
-  return (
-    document.querySelector<HTMLInputElement>(FILE_INPUT_SELECTOR) ??
-    document.querySelector<HTMLInputElement>(FILE_INPUT_FALLBACK_SELECTOR)
-  );
+function findKmlFileInputStrict(): HTMLInputElement | null {
+  return document.querySelector<HTMLInputElement>(FILE_INPUT_SELECTOR);
+}
+
+// Only safe to call once the upload pane is confirmed active (see FILE_INPUT_FALLBACK_SELECTOR's
+// comment above) — never used as the test for "have we reached the upload pane".
+function findKmlFileInputWithFallback(): HTMLInputElement | null {
+  return findKmlFileInputStrict() ?? document.querySelector<HTMLInputElement>(FILE_INPUT_FALLBACK_SELECTOR);
 }
 
 async function waitForKmlFileInput(timeoutMs: number): Promise<HTMLInputElement | null> {
   let fileInput: HTMLInputElement | null = null;
   await pollUntil(() => {
-    fileInput = findKmlFileInput();
+    fileInput = findKmlFileInputWithFallback();
     return fileInput !== null;
   }, timeoutMs);
   return fileInput;
 }
 
+function isUploadNavSelected(option: HTMLElement | null): boolean {
+  return option !== null && isPickerUploadNavSelected(option.getAttribute('aria-selected'));
+}
+
+// Each strategy is applied to the *current* nav option (re-queried by the caller, since delegated
+// jsaction handlers can replace the DOM node) and, if it worked, should flip `aria-selected` to
+// `"true"`. Ordered from least to most intrusive:
+//   1. A plain `.click()` — works if the option has its own click handler.
+//   2. A bubbling pointer/mouse sequence — the listbox's `jsaction="click:cOuCgd"` is delegated on
+//      the *container*, not the option, and delegation needs real bubbling events, which a bare
+//      `HTMLElement.click()` may not synthesize convincingly enough for jsaction to react to.
+//   3/4. Keyboard activation (`Enter`, then `' '`/Space) — the listbox also has
+//      `jsaction="keydown:I481le"`, a genuinely different activation path from click, worth trying
+//      on its own rather than assuming it's covered by the click attempts above.
+const ACTIVATION_STRATEGIES: ReadonlyArray<(option: HTMLElement) => void> = [
+  (option) => option.click(),
+  (option) => {
+    for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
+      const EventCtor = type.startsWith('pointer') ? PointerEvent : MouseEvent;
+      option.dispatchEvent(new EventCtor(type, { bubbles: true }));
+    }
+  },
+  (option) => {
+    option.focus();
+    option.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  },
+  (option) => {
+    option.focus();
+    option.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+  },
+];
+
+// Picker frame only. Escalates through ACTIVATION_STRATEGIES in order, each followed by a bounded
+// re-check, until the upload nav option's `aria-selected` flips to `"true"` or the file input
+// appears (whichever this frame's layout actually renders). Returns false only once every strategy
+// has been tried and neither happened — the caller must treat that as an explicit MyMapsUiChanged,
+// never a silent continue (ADR-0003). See spike results §3 (2026-08-04 second addendum).
+async function activateUploadPaneNav(): Promise<boolean> {
+  for (const applyStrategy of ACTIVATION_STRATEGIES) {
+    const option = findPickerUploadNavOption();
+    if (!option) return false;
+    if (isUploadNavSelected(option)) return true;
+
+    applyStrategy(option);
+
+    const activated = await pollUntil(
+      () => isUploadNavSelected(findPickerUploadNavOption()) || findKmlFileInputStrict() !== null,
+      ACTIVATION_STEP_TIMEOUT_MS,
+    );
+    if (activated) return true;
+  }
+  return false;
+}
+
 // Picker frame only (docs.google.com/picker). This is the only frame where the KML file input
 // actually exists — see spike results "cross-origin picker iframe". Two layouts are possible (see
-// spike results §3, 2026-08-04 addendum): layout 1 has the upload pane (and file input) present
-// immediately; picker v2 instead renders a source-nav listbox and the upload pane doesn't exist in
-// the DOM until "アップロード"/"Upload" is clicked. The picker frame may also still be loading
-// when this message arrives, so neither may exist yet — hence the bounded poll for *either* below,
-// rather than an arbitrary short pre-check timeout.
+// spike results §3, 2026-08-04 addendum + second addendum): layout 1 has the upload pane (and file
+// input) present immediately; picker v2 instead renders a source-nav listbox and the upload pane
+// doesn't exist in the DOM until "アップロード"/"Upload" is activated. The picker frame may also
+// still be loading when this message arrives, so neither may exist yet — hence the bounded poll for
+// *either* below, rather than an arbitrary short pre-check timeout.
+//
+// The layout decision is driven by the nav option's own `aria-selected` state (Module 13.7,
+// `isPickerUploadNavSelected`), never by whether some file input happens to already exist in the
+// frame — a first fix that used file-input presence as the "already on the upload pane" test did
+// not work in the field (the nav stayed `aria-selected="false"`, Drive pane still rendered; see
+// spike results §3, 2026-08-04 second addendum), because the Drive-browsing pane can itself contain
+// a stray file input (drag-and-drop upload support) that the old bare fallback selector could match.
 async function handleFeedKml(jobId: JobId, kml: string, fileName: string): Promise<MapsToWorkerMessage> {
-  let fileInput = findKmlFileInput();
+  const navOrStrictInputReady = await pollUntil(
+    () => findPickerUploadNavOption() !== null || findKmlFileInputStrict() !== null,
+    PREPARE_TIMEOUT_MS,
+  );
+  if (!navOrStrictInputReady) {
+    return { type: 'MAPS_FEED_KML_RESULT', protocolVersion: 1, jobId, ok: false, code: 'MyMapsUiChanged' };
+  }
 
-  if (!fileInput) {
-    const fileInputOrNavReady = await pollUntil(
-      () => findKmlFileInput() !== null || findPickerUploadNavOption() !== null,
-      PREPARE_TIMEOUT_MS,
-    );
-    if (!fileInputOrNavReady) {
+  // If the nav exists but isn't confirmed selected yet, activate it — regardless of whether a file
+  // input was already found by some other selector, since that's exactly what let the previous fix
+  // misfire (see the handler's own comment above).
+  const navOption = findPickerUploadNavOption();
+  if (navOption && !isUploadNavSelected(navOption)) {
+    const activated = await activateUploadPaneNav();
+    if (!activated) {
       return { type: 'MAPS_FEED_KML_RESULT', protocolVersion: 1, jobId, ok: false, code: 'MyMapsUiChanged' };
-    }
-
-    fileInput = findKmlFileInput();
-    if (!fileInput) {
-      // Layout is picker v2: the upload pane isn't rendered yet, only the source-nav listbox is.
-      // Clicking it is the correct recovery (the picker's own `data-sources` config still enables
-      // the upload source with the same `.KML` fileExts — only the default selection differs),
-      // never done when the file input was already present (layout 1) to avoid resetting state.
-      findPickerUploadNavOption()?.click();
-      // The upload pane renders with a lag after the nav click — the fourth recurrence of the
-      // rendering-lag rule (see spike results top-of-doc addenda) — so this is a bounded poll,
-      // never a bare querySelector right after the click.
-      fileInput = await waitForKmlFileInput(PREPARE_TIMEOUT_MS);
     }
   }
 
+  // Safe to use the fallback-including lookup here: either there was no source-nav listbox at all
+  // (layout 1 — a single pane, already the upload pane), or the nav is now confirmed
+  // `aria-selected="true"` (already was, or just activated above).
+  const fileInput = await waitForKmlFileInput(PREPARE_TIMEOUT_MS);
   if (!fileInput) {
     return { type: 'MAPS_FEED_KML_RESULT', protocolVersion: 1, jobId, ok: false, code: 'MyMapsUiChanged' };
   }

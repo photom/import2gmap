@@ -44,3 +44,13 @@ const PICKER_UPLOAD_NAV_LABELS = new Set(['アップロード', 'Upload']);
 export function isPickerUploadNavLabel(text: string): boolean {
   return PICKER_UPLOAD_NAV_LABELS.has(text.trim());
 }
+
+// A first picker-v2 fix (nav click, no verification) shipped but did not work in the field: the
+// user's live DOM still showed the upload nav option `aria-selected="false"` with the Drive-
+// browsing pane still rendered, and the import stalled — see spike results §3 (2026-08-04 second
+// addendum). "Was the nav clicked" turned out not to be a trustworthy signal; the option's own
+// `aria-selected` is the authoritative one, so this is what `handleFeedKml` now polls after every
+// activation attempt instead of assuming a click took effect.
+export function isPickerUploadNavSelected(ariaSelected: string | null): boolean {
+  return ariaSelected === 'true';
+}
