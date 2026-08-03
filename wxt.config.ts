@@ -6,7 +6,8 @@ export default defineConfig({
   outDir: 'output',
   modules: ['@wxt-dev/module-react'],
   manifest: {
-    name: 'import2gmap',
+    version: "0.0.1",
+    name: 'tabelog2gmap',
     description: '食べログの保存リストをGoogleマイマップへ自動インポートするChrome拡張機能',
     permissions: ['storage', 'activeTab', 'scripting'],
     // 'https://docs.google.com/picker*' (path-narrowed, not the whole docs.google.com origin):
