@@ -4,12 +4,9 @@ import { errorMessageFor } from '@/src/domain/errors/error-messages';
 import { isWorkerToPopupMessage } from '@/src/domain/messaging/message-types';
 import type { PopupToWorkerMessage, UiStateSnapshot } from '@/src/domain/messaging/message-types';
 import { TABELOG_ORIGINS } from '@/src/infrastructure/permissions/tabelog-origins';
+import { MY_MAPS_ORIGINS } from '@/src/infrastructure/permissions/my-maps-origins';
 import './App.css';
 
-const MY_MAPS_ORIGIN = 'https://www.google.com/maps/*';
-// The KML upload dialog is a cross-origin docs.google.com/picker iframe (see messaging
-// protocol §6 / spike results); executeScript into it needs its own host permission.
-const MY_MAPS_PICKER_ORIGIN = 'https://docs.google.com/picker*';
 const IN_PROGRESS_POLL_MS = 1_000;
 const IN_PROGRESS_UI_STEPS = new Set(['extracting', 'import_starting']);
 
@@ -63,8 +60,16 @@ export default function App() {
   }, [snapshot, refresh]);
 
   const handleExtractStart = useCallback(async () => {
+    // Chrome's permission confirmation dialog takes focus and destroys this popup's execution
+    // context, so `await`ing permissions.request() below never resolves once the dialog appears
+    // — record the pending intent first (and await the ack) so the write has definitely landed
+    // before the dialog can kill us. The service worker resumes EXTRACT_START from
+    // `permissions.onAdded` if we don't survive to send it ourselves. See message-router's
+    // `routePermissionGranted` and extension-ui-specifications §7.
+    await sendToWorker({ type: 'PERMISSION_REQUEST_PENDING', protocolVersion: 1, step: 'extract' });
     const granted = await browser.permissions.request({ origins: [...TABELOG_ORIGINS] });
     if (!granted) {
+      await sendToWorker({ type: 'PERMISSION_REQUEST_CANCELLED', protocolVersion: 1 });
       setPermissionError({ code: 'HostPermissionDenied', message: errorMessageFor('HostPermissionDenied') });
       return;
     }
@@ -73,8 +78,18 @@ export default function App() {
   }, [sendAndRefresh]);
 
   const handleImportStart = useCallback(async () => {
-    const granted = await browser.permissions.request({ origins: [MY_MAPS_ORIGIN, MY_MAPS_PICKER_ORIGIN] });
+    // See handleExtractStart's comment: same permission-prompt-kills-popup concern, so the same
+    // record-before-prompt pattern applies here, carrying mapName since the worker needs it to
+    // run the import job without the popup.
+    await sendToWorker({
+      type: 'PERMISSION_REQUEST_PENDING',
+      protocolVersion: 1,
+      step: 'import',
+      mapName: mapNameDraft,
+    });
+    const granted = await browser.permissions.request({ origins: [...MY_MAPS_ORIGINS] });
     if (!granted) {
+      await sendToWorker({ type: 'PERMISSION_REQUEST_CANCELLED', protocolVersion: 1 });
       setPermissionError({ code: 'HostPermissionDenied', message: errorMessageFor('HostPermissionDenied') });
       return;
     }

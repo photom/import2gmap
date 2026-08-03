@@ -84,6 +84,23 @@ describe('SessionStorageManager', () => {
     expect(raw?.lastError).toBeUndefined();
   });
 
+  it('persists pendingPermission via patch and clears it via an explicit undefined patch — added 2026-08-04 (test-plan-phase2 Module 19)', async () => {
+    await storage.setItem(SESSION_KEY, {
+      schemaVersion: 1,
+      uiStep: 'ready',
+      mapName: 'マイマップ',
+    });
+    const manager = new SessionStorageManager();
+
+    await manager.patch({ pendingPermission: { step: 'extract', requestedAt: 123 } });
+    let raw = await storage.getItem<Record<string, unknown>>(SESSION_KEY);
+    expect(raw?.pendingPermission).toEqual({ step: 'extract', requestedAt: 123 });
+
+    await manager.patch({ pendingPermission: undefined });
+    raw = await storage.getItem<Record<string, unknown>>(SESSION_KEY);
+    expect(raw?.pendingPermission).toBeUndefined();
+  });
+
   it('clears activeJob and extractResult on discard', async () => {
     await storage.setItem(SESSION_KEY, {
       schemaVersion: 1,

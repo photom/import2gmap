@@ -31,6 +31,7 @@ type SessionRoot = {
   activeJob?: ActiveJob;
   extractResult?: StoredExtractResult;
   lastError?: StoredError;
+  pendingPermission?: PendingPermission;
 };
 
 type UiStep =
@@ -114,6 +115,41 @@ Invariants:
 - Default when entering `extract_complete` or first `confirm`: `食べログ保存リスト YYYY-MM-DD` (local timezone date).
 - Stored in `mapName`; updated by `MAP_NAME_SET`.
 - Required non-empty at `IMPORT_START` after sanitize (max 80).
+
+---
+
+## 5a. Pending permission (added 2026-08-04)
+
+```ts
+type PendingPermission = {
+  step: "extract" | "import";
+  mapName?: string; // only meaningful when step === "import"
+  requestedAt: number; // epoch ms
+};
+```
+
+Why this exists: Chrome's optional-host-permission confirmation dialog takes focus and destroys
+the popup's execution context, so a popup `await`ing `browser.permissions.request(...)` never
+gets to send `EXTRACT_START` / `IMPORT_START` once the dialog appears — without this, the user
+had to press 抽出する / My Maps へインポート a second time after granting (see
+[messaging protocol](extension-messaging-protocol.md), `PERMISSION_REQUEST_PENDING`).
+
+- **Written by**: the popup, right before calling `browser.permissions.request(...)` — awaited so
+  the write has landed before the dialog can kill the popup.
+- **Read/consumed by**: the worker's `browser.permissions.onAdded` listener, which resumes the
+  recorded step once the grant is confirmed (`routePermissionGranted` in
+  `src/application/message-router.ts`). Never acted on for a bare `onAdded` with no recorded
+  intent — that also fires for a permission granted by hand from `chrome://extensions`, and
+  auto-starting a job from that would violate ADR-0003's "the user explicitly starts extraction
+  and import."
+- **Cleared** when: the resumed step actually starts a job, the popup itself successfully starts
+  the same job (`EXTRACT_START`/`IMPORT_START` always clear it as part of their patch, whether or
+  not one was recorded), the popup sends `PERMISSION_REQUEST_CANCELLED` after a denial, or the
+  intent is older than a TTL (5 minutes, `PENDING_PERMISSION_TTL_MS`) when `onAdded` fires — see
+  `isPendingPermissionFresh` (`src/domain/session/pending-permission.ts`), a pure, unit-tested
+  predicate.
+- Survives the popup being destroyed; does **not** need to survive a browser restart
+  (`chrome.storage.session`, same as the rest of this schema).
 
 ---
 

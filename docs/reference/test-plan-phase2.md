@@ -73,6 +73,13 @@ Pure function `route(state: SessionRoot, tabContext, message) → { patch: Parti
   - [ ] `lastError.retryStep === "extract"` → routes as a fresh `EXTRACT_START` from `ready`.
   - [ ] `lastError.retryStep === "import"` → routes as a fresh `IMPORT_START`.
   - [ ] `lastError.retryStep === "none"` → transitions to `ready` only.
+- [x] **7.10 `IMPORT_START` idempotency guard — added 2026-08-04** (bugfix: the popup permission prompt closes the popup before it can `await` the grant, so a resumed job and a surviving popup's own `IMPORT_START` can both fire; see Module 19)
+  - [x] An `IMPORT_START` while `state.activeJob` is already set (either `kind`) → no-op (`{ patch: {} }`), same shape as the existing `EXTRACT_START` guard.
+- [x] **7.11 `PERMISSION_REQUEST_PENDING` / `PERMISSION_REQUEST_CANCELLED` — added 2026-08-04** (see Module 19 for why these exist)
+  - [x] `PERMISSION_REQUEST_PENDING` with `step: "extract"` → patches `pendingPermission: { step: "extract", requestedAt: now() }`.
+  - [x] `PERMISSION_REQUEST_PENDING` with `step: "import", mapName` → patches `pendingPermission: { step: "import", mapName, requestedAt: now() }`.
+  - [x] `PERMISSION_REQUEST_CANCELLED` → patches `pendingPermission: undefined`.
+  - [x] A successful `EXTRACT_START` or `IMPORT_START` patch always includes `pendingPermission: undefined` (clears any intent that was recorded before the permission prompt), even when no `pendingPermission` was set.
 
 ---
 
@@ -116,6 +123,32 @@ Declarative; verified by build/manual load rather than Vitest unit tests (WXT co
 
 - [ ] **10.1** `npm run build` produces a manifest with `action.default_popup`, `permissions: ["storage", "activeTab", "scripting"]`, and `optional_host_permissions` for Tabelog + Google Maps (checked via `output/*/manifest.json` inspection, not Vitest).
 - [ ] **10.2** Manual smoke test: load unpacked build, open a Tabelog PC saved-list tab, confirm the popup shows `ready` and 抽出する is enabled (this is the check that closes the original "動線が出来ていない" report).
+
+---
+
+## Module 19: Permission-Prompt-Kills-Popup Resume — added 2026-08-04
+
+**Bug**: Chrome's optional-host-permission confirmation dialog takes focus and destroys the popup's execution context. `handleExtractStart` / `handleImportStart` in `entrypoints/popup/App.tsx` were `await`ing `browser.permissions.request(...)` and then sending `EXTRACT_START` / `IMPORT_START` — a line that never ran once the popup died, so nothing happened until the user pressed the button again (by which point the permission was already granted and the second press worked, which is exactly the "press it twice" symptom). Fix: the popup records the pending intent in session storage (Module 7.11) **before** calling `permissions.request()`, and the service worker resumes the job itself from `browser.permissions.onAdded`, since the worker survives the popup's death.
+
+Related: [messaging protocol](extension-messaging-protocol.md) (`PERMISSION_REQUEST_PENDING` / `PERMISSION_REQUEST_CANCELLED`), [session schema](extension-session-storage-schema.md) (`pendingPermission`), [UI spec §7](extension-ui-specifications.md#7-permissions-ux), [error codes](extension-error-codes.md) (`NotSavedListPage`, `WrongTab`).
+
+- [x] **19.1 `isPendingPermissionFresh` (`src/domain/session/pending-permission.ts`)** — pure TTL predicate, unit-tested directly.
+  - [x] `now - pendingAt <= ttlMs` → `true` (fresh; boundary inclusive).
+  - [x] `now - pendingAt > ttlMs` → `false` (expired).
+- [x] **19.2 `routePermissionGranted` (`src/application/message-router.ts`)** — pure function called by the worker's `permissions.onAdded` handler; never invoked by a bare `onAdded` with no recorded intent (an unrelated hand-grant from `chrome://extensions` must not auto-start a job, per ADR-0003's explicit-start rule).
+  - [x] No `pendingPermission` recorded → no-op (`{ patch: {} }`); the wrapper only calls this once it has already confirmed a pending intent exists and the required origins are `contains()`-satisfied.
+  - [x] `pendingPermission` older than the TTL → clears it (`pendingPermission: undefined`), starts nothing.
+  - [x] `step: "extract"`, active tab is the Tabelog saved list (`tabContext: "ready"`) → starts the extract job exactly like a fresh `EXTRACT_START` (same `tabCommand`), clears `pendingPermission`.
+  - [x] `step: "extract"`, active tab is Tabelog but not the saved list (`tabContext: "wrong_tabelog_page"`) → explicit `error` with `NotSavedListPage`, clears `pendingPermission`. **No silent no-op** (ADR-0003).
+  - [x] `step: "extract"`, active tab is not Tabelog at all (`tabContext: "wrong_tab"`) → explicit `error` with `WrongTab`, clears `pendingPermission`.
+  - [x] `step: "import"` with a recorded `mapName` → starts the import job exactly like a fresh `IMPORT_START` (same `tabCommand`), clears `pendingPermission`.
+  - [x] A job already active (either kind) when the intent resolves → no-op via the same idempotency guards as 7.2/7.10, but `pendingPermission` is still cleared (the intent was consumed, not silently forgotten in storage).
+- [x] **19.3 Worker wiring (`entrypoints/background.ts`, thin wrapper — not unit-tested, same convention as Module 17)**
+  - [x] Registers `browser.permissions.onAdded`; on fire, reads the session, and only proceeds if `pendingPermission` is set.
+  - [x] Re-checks `browser.permissions.contains({ origins: <required for pending.step> })` rather than trusting the event's own `origins` delta (an already-partially-granted origin set can make the delta a strict subset of what the step actually needs).
+  - [x] Resolves the active tab the same way `handlePopupMessage` does (`getActiveTab()` → `detectTabContext`) before calling `routePermissionGranted`, so the `NotSavedListPage` / `WrongTab` resume-time check (19.2) has real tab data.
+  - [x] Dispatches the resulting `tabCommand` (`runExtractJob` / `runImportJob`) the same way `handlePopupMessage` does; both entry points share one `applyRouteResult` helper.
+- [x] **19.4 Idempotent double-fire (manual reasoning check, not separately unit-tested beyond 7.10/19.2)**: if the popup happens to survive the prompt (permission was already granted, no dialog shown) and sends `EXTRACT_START`/`IMPORT_START` itself, and `onAdded` also fires for an unrelated reason, both paths are safe to run — the second one always observes `activeJob` already set and no-ops.
 
 ---
 

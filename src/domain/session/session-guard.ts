@@ -1,5 +1,5 @@
 import { ExtractionError } from '../errors/extraction-error';
-import type { SessionRoot, StoredExtractResult, UiStep } from '../models/session';
+import type { PendingPermission, SessionRoot, StoredExtractResult, UiStep } from '../models/session';
 
 const VALID_UI_STEPS: readonly UiStep[] = [
   'ready',
@@ -26,6 +26,15 @@ function isValidExtractResult(value: unknown): value is StoredExtractResult {
   return true;
 }
 
+function isValidPendingPermission(value: unknown): value is PendingPermission {
+  if (!isRecord(value)) return false;
+  const { step, mapName, requestedAt } = value;
+  if (step !== 'extract' && step !== 'import') return false;
+  if (mapName !== undefined && typeof mapName !== 'string') return false;
+  if (typeof requestedAt !== 'number') return false;
+  return true;
+}
+
 export function validateSessionRoot(raw: unknown): SessionRoot {
   if (!isRecord(raw)) {
     throw new ExtractionError('SessionCorrupt');
@@ -40,6 +49,9 @@ export function validateSessionRoot(raw: unknown): SessionRoot {
     throw new ExtractionError('SessionCorrupt');
   }
   if (raw.extractResult !== undefined && !isValidExtractResult(raw.extractResult)) {
+    throw new ExtractionError('SessionCorrupt');
+  }
+  if (raw.pendingPermission !== undefined && !isValidPendingPermission(raw.pendingPermission)) {
     throw new ExtractionError('SessionCorrupt');
   }
 

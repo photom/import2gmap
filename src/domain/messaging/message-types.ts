@@ -31,7 +31,19 @@ export type PopupToWorkerMessage =
   | { readonly type: 'MAP_NAME_SET'; readonly protocolVersion: ProtocolVersion; readonly mapName: string }
   | { readonly type: 'IMPORT_START'; readonly protocolVersion: ProtocolVersion; readonly mapName: string }
   | { readonly type: 'IMPORT_CANCEL'; readonly protocolVersion: ProtocolVersion; readonly jobId: JobId }
-  | { readonly type: 'ERROR_RETRY'; readonly protocolVersion: ProtocolVersion };
+  | { readonly type: 'ERROR_RETRY'; readonly protocolVersion: ProtocolVersion }
+  // Sent right before `browser.permissions.request(...)`, and awaited, so the write has landed
+  // in session storage before Chrome's permission dialog can close the popup and kill its JS
+  // context. See message-router's `routePermissionGranted` / session model's `PendingPermission`.
+  | { readonly type: 'PERMISSION_REQUEST_PENDING'; readonly protocolVersion: ProtocolVersion; readonly step: 'extract' }
+  | {
+      readonly type: 'PERMISSION_REQUEST_PENDING';
+      readonly protocolVersion: ProtocolVersion;
+      readonly step: 'import';
+      readonly mapName: string;
+    }
+  // Sent when `permissions.request()` resolves `false` (denial) and the popup survived to see it.
+  | { readonly type: 'PERMISSION_REQUEST_CANCELLED'; readonly protocolVersion: ProtocolVersion };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -64,6 +76,12 @@ export function isPopupToWorkerMessage(value: unknown): value is PopupToWorkerMe
       return typeof value.mapName === 'string';
     case 'IMPORT_START':
       return typeof value.mapName === 'string';
+    case 'PERMISSION_REQUEST_PENDING':
+      if (value.step === 'extract') return true;
+      if (value.step === 'import') return typeof value.mapName === 'string';
+      return false;
+    case 'PERMISSION_REQUEST_CANCELLED':
+      return true;
     default:
       return false;
   }

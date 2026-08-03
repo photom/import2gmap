@@ -71,6 +71,8 @@ Domain payloads (`ExtractedShop`, `ExtractedSavedList`, `CollectionRef`) match [
 | `IMPORT_START` | `{ protocolVersion, mapName: string }` | **My Maps へインポート** |
 | `IMPORT_CANCEL` | `{ protocolVersion, jobId }` | Cancel during `import_starting` (best effort) |
 | `ERROR_RETRY` | `{ protocolVersion }` | **再試行** — worker uses last `retryStep` |
+| `PERMISSION_REQUEST_PENDING` | `{ protocolVersion, step: "extract" }` or `{ protocolVersion, step: "import", mapName: string }` | Sent (and awaited) immediately **before** `browser.permissions.request(...)`, added 2026-08-04 — see §7a |
+| `PERMISSION_REQUEST_CANCELLED` | `{ protocolVersion }` | Sent when `permissions.request()` resolves `false` and the popup survived to see it, added 2026-08-04 |
 
 ---
 
@@ -179,7 +181,56 @@ Renaming the My Maps document itself to the user's chosen map name **is automate
 
 ---
 
-## 7. Forbidden
+## 7. Worker permission-prompt resume (`permissions.onAdded`) — added 2026-08-04
+
+Root cause this section fixes: Chrome's optional-host-permission confirmation dialog takes focus
+and **destroys the popup's execution context**. `handleExtractStart` / `handleImportStart` in
+`entrypoints/popup/App.tsx` used to `await browser.permissions.request(...)` and only send
+`EXTRACT_START` / `IMPORT_START` afterward — that line never ran once the dialog appeared, so
+nothing happened until the user pressed the button again (by which point the permission was
+already granted, so the second press worked without a dialog — the reported "press it twice" bug).
+
+The service worker survives the popup's death, so it resumes the flow itself:
+
+1. Before calling `permissions.request(...)`, the popup sends `PERMISSION_REQUEST_PENDING`
+   (§3) and **awaits the reply**, guaranteeing the intent is written to
+   `chrome.storage.session` (`pendingPermission`, [session schema §5a](extension-session-storage-schema.md#5a-pending-permission-added-2026-08-04))
+   before the dialog can kill the popup.
+2. The worker registers `browser.permissions.onAdded`. On fire, it:
+   - Reads the session; if there is no `pendingPermission`, it does nothing (a bare grant from
+     `chrome://extensions` must not auto-start a job — ADR-0003).
+   - Re-checks `browser.permissions.contains({ origins: <required for pending.step> })` rather
+     than trusting the event's own `origins` delta.
+   - Resolves the active tab the same way `handlePopupMessage` does (`getActiveTab()` →
+     `detectTabContext`).
+   - Calls the pure `routePermissionGranted(state, tabContext, deps)` (`src/application/message-router.ts`)
+     and applies its `patch`/`tabCommand` exactly like a popup-originated message.
+3. `routePermissionGranted`:
+   - No-ops if the intent is missing or older than a TTL (`PENDING_PERMISSION_TTL_MS`, 5 minutes;
+     see `isPendingPermissionFresh`).
+   - `step: "extract"` with the active tab still the saved list → starts the extract job exactly
+     like a fresh `EXTRACT_START`.
+   - `step: "extract"` with the wrong tab → **explicit** `error` (`NotSavedListPage` /
+     `WrongTab`, per [error codes](extension-error-codes.md)), never a silent no-op (ADR-0003).
+   - `step: "import"` → starts the import job exactly like a fresh `IMPORT_START`, using the
+     `mapName` recorded in `pendingPermission`.
+   - Always clears `pendingPermission` once it acts (or once expiry is detected).
+4. If the popup instead survives the prompt (permission was already granted, so Chrome shows no
+   dialog), its own `EXTRACT_START` / `IMPORT_START` still runs. Both paths are idempotent: an
+   `EXTRACT_START`/`IMPORT_START` while a job is already active for that step is a no-op
+   (`routeImportStart`'s `state.activeJob` guard mirrors the existing `routeExtractStart` one),
+   and both success paths clear `pendingPermission` regardless of which path actually started the
+   job.
+5. If `permissions.request()` resolves `false` (denial) and the popup survived to see it, the
+   popup sends `PERMISSION_REQUEST_CANCELLED` to clear the now-stale intent.
+
+Net effect for the user: reopening the popup after granting the permission lands on `extracting`
+/ `import_starting` — no second button press required. See
+[UI spec §7](extension-ui-specifications.md#7-permissions-ux).
+
+---
+
+## 8. Forbidden
 
 - Untyped payloads or stringly `action` without `type` union
 - Popup → content direct messages (v1)

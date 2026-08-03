@@ -53,4 +53,35 @@ describe('validateSessionRoot', () => {
     expect(error).toBeInstanceOf(ExtractionError);
     expect((error as ExtractionError).code).toBe('SessionCorrupt');
   });
+
+  it('accepts a valid pendingPermission for extract', () => {
+    const root = { ...validRoot, pendingPermission: { step: 'extract', requestedAt: 1 } };
+    expect(validateSessionRoot(root)).toEqual(root);
+  });
+
+  it('accepts a valid pendingPermission for import with a mapName', () => {
+    const root = {
+      ...validRoot,
+      pendingPermission: { step: 'import', mapName: 'マップ', requestedAt: 1 },
+    };
+    expect(validateSessionRoot(root)).toEqual(root);
+  });
+
+  it('throws SessionCorrupt when pendingPermission.step is not extract or import', () => {
+    const error = captureError(() =>
+      validateSessionRoot({ ...validRoot, pendingPermission: { step: 'bogus', requestedAt: 1 } }),
+    );
+
+    expect(error).toBeInstanceOf(ExtractionError);
+    expect((error as ExtractionError).code).toBe('SessionCorrupt');
+  });
+
+  it('throws SessionCorrupt when pendingPermission.requestedAt is not a number', () => {
+    const error = captureError(() =>
+      validateSessionRoot({ ...validRoot, pendingPermission: { step: 'extract', requestedAt: 'now' } }),
+    );
+
+    expect(error).toBeInstanceOf(ExtractionError);
+    expect((error as ExtractionError).code).toBe('SessionCorrupt');
+  });
 });

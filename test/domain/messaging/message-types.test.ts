@@ -74,6 +74,39 @@ describe('isPopupToWorkerMessage', () => {
     expect(isPopupToWorkerMessage({ type: 'ERROR_RETRY', protocolVersion: 1 })).toBe(true);
   });
 
+  it('accepts PERMISSION_REQUEST_PENDING for step extract', () => {
+    expect(
+      isPopupToWorkerMessage({ type: 'PERMISSION_REQUEST_PENDING', protocolVersion: 1, step: 'extract' }),
+    ).toBe(true);
+  });
+
+  it('accepts PERMISSION_REQUEST_PENDING for step import with a mapName', () => {
+    expect(
+      isPopupToWorkerMessage({
+        type: 'PERMISSION_REQUEST_PENDING',
+        protocolVersion: 1,
+        step: 'import',
+        mapName: 'マップ',
+      }),
+    ).toBe(true);
+  });
+
+  it('rejects PERMISSION_REQUEST_PENDING for step import without a mapName', () => {
+    expect(
+      isPopupToWorkerMessage({ type: 'PERMISSION_REQUEST_PENDING', protocolVersion: 1, step: 'import' }),
+    ).toBe(false);
+  });
+
+  it('rejects PERMISSION_REQUEST_PENDING with an unknown step', () => {
+    expect(
+      isPopupToWorkerMessage({ type: 'PERMISSION_REQUEST_PENDING', protocolVersion: 1, step: 'bogus' }),
+    ).toBe(false);
+  });
+
+  it('accepts PERMISSION_REQUEST_CANCELLED', () => {
+    expect(isPopupToWorkerMessage({ type: 'PERMISSION_REQUEST_CANCELLED', protocolVersion: 1 })).toBe(true);
+  });
+
   it('rejects an unknown type', () => {
     expect(isPopupToWorkerMessage({ type: 'NOT_A_REAL_TYPE', protocolVersion: 1 })).toBe(false);
   });

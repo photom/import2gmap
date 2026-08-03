@@ -210,6 +210,26 @@ This document does **not** specify Maps DOM selectors — see [spike results](..
 - First **My Maps へインポート** may trigger optional hosts for Google Maps / My Maps.
 - Explain in short status text that site access is needed for that step; no custom HTML permission page required beyond Chrome’s prompt.
 
+**Chrome's permission prompt closes the popup — added 2026-08-04.** Chrome's native
+optional-host-permission confirmation dialog takes focus, which closes the extension popup and
+destroys its JS execution context. The popup cannot rely on anything it does *after* `await`ing
+`browser.permissions.request(...)` — that continuation never runs once the dialog appears. To
+avoid making the user press **抽出する** / **My Maps へインポート** a second time after granting:
+
+- The popup records the pending step in session storage (`pendingPermission`; see
+  [session schema §5a](extension-session-storage-schema.md#5a-pending-permission-added-2026-08-04))
+  and awaits the write completing **before** calling `permissions.request()`.
+- The service worker — which survives the popup's death — resumes the step itself from
+  `browser.permissions.onAdded` once the grant lands (see
+  [messaging protocol §7](extension-messaging-protocol.md#7-worker-permission-prompt-resume-permissionsonadded--added-2026-08-04)).
+- No new screen id is introduced for this. Reopening the popup after granting the permission
+  simply lands on the existing `extracting` / `import_starting` screen (Sections 3.3 / 3.6) — the
+  same screens already shown when the popup survives the prompt — so the user sees progress or
+  the in-flight state instead of a frozen `ready`/`confirm` screen that needs a second press.
+- If the active tab is no longer the Tabelog saved list by the time the worker resumes an extract
+  intent, it surfaces the existing `error` screen (Section 3.7) with `NotSavedListPage` or
+  `WrongTab` — never a silent no-op.
+
 ---
 
 ## 8. Non-goals (v1 UI)

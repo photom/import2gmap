@@ -51,6 +51,17 @@ export type StoredError = {
   readonly at: number;
 };
 
+// Recorded by the popup right before it calls `browser.permissions.request(...)`, because
+// Chrome's native permission dialog takes focus and destroys the popup's execution context —
+// the popup cannot rely on its own in-memory state (or even resuming its own `await`) surviving
+// the prompt. The service worker resumes the recorded step from `permissions.onAdded` once the
+// grant lands. See message-router's `routePermissionGranted` and extension-ui-specifications §7.
+export type PendingPermission = {
+  readonly step: 'extract' | 'import';
+  readonly mapName?: string; // only meaningful for step 'import'
+  readonly requestedAt: number; // epoch ms; see isPendingPermissionFresh for the TTL check
+};
+
 export type SessionRoot = {
   readonly schemaVersion: 1;
   readonly uiStep: UiStep;
@@ -58,4 +69,5 @@ export type SessionRoot = {
   readonly activeJob?: ActiveJob;
   readonly extractResult?: StoredExtractResult;
   readonly lastError?: StoredError;
+  readonly pendingPermission?: PendingPermission;
 };

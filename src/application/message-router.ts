@@ -1,6 +1,15 @@
-import type { SessionRoot, StoredError, UiStep } from '../domain/models/session';
+import type { PendingPermission, SessionRoot, StoredError, UiStep } from '../domain/models/session';
 import type { JobId, PopupToWorkerMessage, UiStateSnapshot, WorkerToPopupMessage } from '../domain/messaging/message-types';
 import type { TabContext } from './tab-context-detector';
+import { isPendingPermissionFresh } from '../domain/session/pending-permission';
+import { errorMessageFor } from '../domain/errors/error-messages';
+
+// A permission grant can arrive long after the popup that requested it died on denial (see
+// App.tsx's PERMISSION_REQUEST_CANCELLED path, which may itself never run if the popup was
+// killed by the prompt). Bound how long a recorded intent stays actionable so a much-later
+// unrelated grant (e.g. a user manually flipping a permission in chrome://extensions) can't
+// trigger a stale job.
+export const PENDING_PERMISSION_TTL_MS = 5 * 60 * 1000;
 
 export type TabCommand =
   | { readonly kind: 'start_extract'; readonly jobId: JobId }
@@ -82,6 +91,7 @@ function routeExtractStart(state: SessionRoot, tabContext: TabContext, deps: Rou
       uiStep: 'extracting',
       activeJob: { jobId, kind: 'extract', startedAt: deps.now() },
       lastError: undefined,
+      pendingPermission: undefined,
     },
     tabCommand: { kind: 'start_extract', jobId },
   };
@@ -112,21 +122,32 @@ function routeMapNameSet(mapName: string): RouteResult {
   return { patch: { mapName } };
 }
 
-function importPreludeFailure(code: string, message: string, retryStep: StoredError['retryStep'], now: number): RouteResult {
+// `message` always comes from the error catalog (`docs/reference/extension-error-codes.md` via
+// `errorMessageFor`) — the single source of truth for user-facing copy; never inline a string
+// here, or it will drift from the catalog the moment either one is edited.
+function importPreludeFailure(code: string, retryStep: StoredError['retryStep'], now: number): RouteResult {
   return {
     patch: {
       uiStep: 'error',
-      lastError: { code, message, retryStep, at: now },
+      lastError: { code, message: errorMessageFor(code), retryStep, at: now },
+      pendingPermission: undefined,
     },
   };
 }
 
+// Guards the same way `routeExtractStart` guards on `currentUiStep(...) !== 'ready'`: without
+// this, a resumed IMPORT_START (from `routePermissionGranted`, after the permission-prompt-kills-
+// popup fix) and a surviving popup's own IMPORT_START could both fire and start two import jobs.
+// See test-plan-phase2 Module 7.10.
 function routeImportStart(state: SessionRoot, mapName: string, deps: RouteDeps): RouteResult {
+  if (state.activeJob) {
+    return { patch: {} };
+  }
   if (!state.extractResult) {
-    return importPreludeFailure('NoExtractResult', '先に抽出してください。', 'extract', deps.now());
+    return importPreludeFailure('NoExtractResult', 'extract', deps.now());
   }
   if (mapName.trim() === '') {
-    return importPreludeFailure('InvalidMapName', 'マップ名を入力してください。', 'none', deps.now());
+    return importPreludeFailure('InvalidMapName', 'none', deps.now());
   }
   const jobId = deps.newJobId();
   return {
@@ -135,9 +156,65 @@ function routeImportStart(state: SessionRoot, mapName: string, deps: RouteDeps):
       activeJob: { jobId, kind: 'import', startedAt: deps.now() },
       mapName,
       lastError: undefined,
+      pendingPermission: undefined,
     },
     tabCommand: { kind: 'open_my_maps', jobId, mapName },
   };
+}
+
+function routePermissionRequestPending(
+  step: 'extract' | 'import',
+  mapName: string | undefined,
+  deps: RouteDeps,
+): RouteResult {
+  const pendingPermission: PendingPermission = { step, mapName, requestedAt: deps.now() };
+  return { patch: { pendingPermission } };
+}
+
+function routePermissionRequestCancelled(): RouteResult {
+  return { patch: { pendingPermission: undefined } };
+}
+
+function withPendingPermissionCleared(result: RouteResult): RouteResult {
+  return { ...result, patch: { ...result.patch, pendingPermission: undefined } };
+}
+
+// Called by the worker's `permissions.onAdded` handler — never off a bare `onAdded` event with
+// no recorded intent (that also fires for a permission granted by hand from
+// chrome://extensions, and auto-starting a job from that would violate ADR-0003's "the user
+// explicitly starts extraction and import"). The caller is responsible for confirming a
+// `pendingPermission` exists and that the granted permissions actually satisfy it (via
+// `browser.permissions.contains`) before calling this.
+export function routePermissionGranted(state: SessionRoot, tabContext: TabContext, deps: RouteDeps): RouteResult {
+  const pending = state.pendingPermission;
+  if (!pending) {
+    return { patch: {} };
+  }
+  if (!isPendingPermissionFresh(pending.requestedAt, deps.now(), PENDING_PERMISSION_TTL_MS)) {
+    return { patch: { pendingPermission: undefined } };
+  }
+  if (pending.step === 'extract') {
+    if (tabContext !== 'ready') {
+      // Explicit failure, never a silent no-op (ADR-0003): the active tab having wandered away
+      // from the saved list between the permission prompt and the grant landing is a real,
+      // user-visible failure mode, not something to swallow.
+      const code = tabContext === 'wrong_tabelog_page' ? 'NotSavedListPage' : 'WrongTab';
+      return {
+        patch: {
+          pendingPermission: undefined,
+          uiStep: 'error',
+          lastError: {
+            code,
+            message: errorMessageFor(code),
+            retryStep: 'none',
+            at: deps.now(),
+          },
+        },
+      };
+    }
+    return withPendingPermissionCleared(routeExtractStart(state, tabContext, deps));
+  }
+  return withPendingPermissionCleared(routeImportStart(state, pending.mapName ?? '', deps));
 }
 
 function routeErrorRetry(state: SessionRoot, tabContext: TabContext, deps: RouteDeps): RouteResult {
@@ -178,6 +255,14 @@ export function route(
       return { patch: { uiStep: 'ready', activeJob: undefined } };
     case 'ERROR_RETRY':
       return routeErrorRetry(state, tabContext, deps);
+    case 'PERMISSION_REQUEST_PENDING':
+      return routePermissionRequestPending(
+        message.step,
+        message.step === 'import' ? message.mapName : undefined,
+        deps,
+      );
+    case 'PERMISSION_REQUEST_CANCELLED':
+      return routePermissionRequestCancelled();
     default:
       return { patch: {} };
   }

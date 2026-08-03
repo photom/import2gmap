@@ -1,6 +1,7 @@
 import { SessionStorageManager } from '@/src/infrastructure/storage/session-storage-manager';
 import { detectTabContext } from '@/src/application/tab-context-detector';
-import { route } from '@/src/application/message-router';
+import { route, routePermissionGranted } from '@/src/application/message-router';
+import type { RouteDeps, RouteResult } from '@/src/application/message-router';
 import { isPopupToWorkerMessage } from '@/src/domain/messaging/message-types';
 import type {
   ContentToWorkerMessage,
@@ -14,6 +15,8 @@ import type { StoredError, StoredShop } from '@/src/domain/models/session';
 import { errorMessageFor } from '@/src/domain/errors/error-messages';
 import { KmlBuilder } from '@/src/domain/kml/kml-builder';
 import { hasCreatedNewMap } from '@/src/domain/my-maps/my-maps-detectors';
+import { TABELOG_ORIGINS } from '@/src/infrastructure/permissions/tabelog-origins';
+import { MY_MAPS_ORIGINS } from '@/src/infrastructure/permissions/my-maps-origins';
 
 const TABELOG_CONTENT_SCRIPT = '/content-scripts/tabelog.js';
 const MYMAPS_CONTENT_SCRIPT = '/content-scripts/mymaps.js';
@@ -36,6 +39,34 @@ export default defineBackground(() => {
     return true;
   });
 
+  // Chrome's optional-host-permission confirmation dialog takes focus and destroys the popup's
+  // execution context, so a `permissions.request()` promise awaited in the popup never resolves
+  // once the dialog appears — the popup dies before it can send EXTRACT_START/IMPORT_START. The
+  // worker survives the popup's death, so it resumes the recorded step itself once the grant
+  // lands. See message-router's `routePermissionGranted`, session model's `PendingPermission`,
+  // and test-plan-phase2 Module 19. Deliberately does NOT act on a bare `onAdded` with no
+  // recorded intent (that also fires for a permission granted by hand from chrome://extensions;
+  // ADR-0003 requires the user to explicitly start extraction/import).
+  browser.permissions.onAdded.addListener(() => {
+    void handlePermissionGranted();
+  });
+
+  function routeDeps(): RouteDeps {
+    return { newJobId: () => crypto.randomUUID(), now: () => Date.now() };
+  }
+
+  async function applyRouteResult(result: RouteResult, tab: { id?: number } | undefined): Promise<void> {
+    if (Object.keys(result.patch).length > 0) {
+      await sessionManager.patch(result.patch);
+    }
+    if (result.tabCommand?.kind === 'start_extract' && tab?.id !== undefined) {
+      void runExtractJob(tab.id, result.tabCommand.jobId);
+    }
+    if (result.tabCommand?.kind === 'open_my_maps') {
+      void runImportJob(result.tabCommand.jobId, result.tabCommand.mapName);
+    }
+  }
+
   async function handlePopupMessage(
     message: PopupToWorkerMessage,
     sendResponse: (reply: WorkerToPopupMessage | undefined) => void,
@@ -43,22 +74,31 @@ export default defineBackground(() => {
     const tab = await getActiveTab();
     const tabContext = detectTabContext(tab?.url);
     const session = await sessionManager.read();
-    const result = route(session, tabContext, message, {
-      newJobId: () => crypto.randomUUID(),
-      now: () => Date.now(),
-    });
+    const result = route(session, tabContext, message, routeDeps());
 
-    if (Object.keys(result.patch).length > 0) {
-      await sessionManager.patch(result.patch);
-    }
+    await applyRouteResult(result, tab);
     sendResponse(result.reply);
+  }
 
-    if (result.tabCommand?.kind === 'start_extract' && tab?.id !== undefined) {
-      void runExtractJob(tab.id, result.tabCommand.jobId);
+  async function handlePermissionGranted(): Promise<void> {
+    const session = await sessionManager.read();
+    const pending = session.pendingPermission;
+    if (!pending) {
+      return;
     }
-    if (result.tabCommand?.kind === 'open_my_maps') {
-      void runImportJob(result.tabCommand.jobId, result.tabCommand.mapName);
+    // Re-check via `contains` rather than trusting the onAdded event's own `origins` delta: if
+    // part of the required set was already granted earlier (e.g. Tabelog granted for a prior
+    // extract, now waiting on the Maps origins for import), the event's delta alone would be a
+    // strict subset of what this step actually needs.
+    const requiredOrigins = pending.step === 'extract' ? TABELOG_ORIGINS : MY_MAPS_ORIGINS;
+    const satisfied = await browser.permissions.contains({ origins: [...requiredOrigins] });
+    if (!satisfied) {
+      return;
     }
+    const tab = await getActiveTab();
+    const tabContext = detectTabContext(tab?.url);
+    const result = routePermissionGranted(session, tabContext, routeDeps());
+    await applyRouteResult(result, tab);
   }
 
   async function getActiveTab() {
