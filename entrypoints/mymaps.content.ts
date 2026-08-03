@@ -55,6 +55,16 @@ const ACTIVATION_STEP_TIMEOUT_MS = 1_000;
 // avoid piling up duplicate `runtime.onMessage` listeners.
 const REGISTERED_FLAG = '__import2gmapMymapsRegistered';
 
+// Diagnostic-only: mirrors entrypoints/background.ts's logStep so the picker-frame path (the one
+// step this flow currently cannot see into at all) shows up under the same greppable prefix in
+// the service-worker console. Never pass page HTML, shop data, URLs, or map names here — only
+// step names, jobId, selector-found booleans, and aria-selected/role strings (see
+// docs/reference/extension-error-codes.md §1's "Logging" rule).
+const LOG_PREFIX = '[import2gmap]';
+function logStep(jobId: JobId, step: string, detail?: string): void {
+  console.log(`${LOG_PREFIX} job=${jobId} step=${step}${detail !== undefined ? ` ${detail}` : ''}`);
+}
+
 function isAlreadyRegisteredInThisDocument(): boolean {
   return Boolean((window as unknown as Record<string, boolean>)[REGISTERED_FLAG]);
 }
@@ -266,17 +276,23 @@ const ACTIVATION_STRATEGIES: ReadonlyArray<(option: HTMLElement) => void> = [
 // appears (whichever this frame's layout actually renders). Returns false only once every strategy
 // has been tried and neither happened — the caller must treat that as an explicit MyMapsUiChanged,
 // never a silent continue (ADR-0003). See spike results §3 (2026-08-04 second addendum).
-async function activateUploadPaneNav(): Promise<boolean> {
-  for (const applyStrategy of ACTIVATION_STRATEGIES) {
+async function activateUploadPaneNav(jobId: JobId): Promise<boolean> {
+  for (const [index, applyStrategy] of ACTIVATION_STRATEGIES.entries()) {
     const option = findPickerUploadNavOption();
     if (!option) return false;
     if (isUploadNavSelected(option)) return true;
 
+    logStep(jobId, 'feedKml:activateNav:before', `strategy=${index} ariaSelected=${option.getAttribute('aria-selected')}`);
     applyStrategy(option);
 
     const activated = await pollUntil(
       () => isUploadNavSelected(findPickerUploadNavOption()) || findKmlFileInputStrict() !== null,
       ACTIVATION_STEP_TIMEOUT_MS,
+    );
+    logStep(
+      jobId,
+      'feedKml:activateNav:after',
+      `strategy=${index} ariaSelected=${findPickerUploadNavOption()?.getAttribute('aria-selected') ?? 'n/a'}`,
     );
     if (activated) return true;
   }
@@ -303,6 +319,7 @@ async function handleFeedKml(jobId: JobId, kml: string, fileName: string): Promi
     PREPARE_TIMEOUT_MS,
   );
   if (!navOrStrictInputReady) {
+    logStep(jobId, 'feedKml:layout', 'branch=neither_found');
     return { type: 'MAPS_FEED_KML_RESULT', protocolVersion: 1, jobId, ok: false, code: 'MyMapsUiChanged' };
   }
 
@@ -310,8 +327,14 @@ async function handleFeedKml(jobId: JobId, kml: string, fileName: string): Promi
   // input was already found by some other selector, since that's exactly what let the previous fix
   // misfire (see the handler's own comment above).
   const navOption = findPickerUploadNavOption();
-  if (navOption && !isUploadNavSelected(navOption)) {
-    const activated = await activateUploadPaneNav();
+  const navNeedsActivation = navOption !== null && !isUploadNavSelected(navOption);
+  logStep(
+    jobId,
+    'feedKml:layout',
+    `branch=${navNeedsActivation ? 'upload_nav_activation_needed' : navOption ? 'upload_nav_already_selected' : 'file_input_already_present'}`,
+  );
+  if (navNeedsActivation) {
+    const activated = await activateUploadPaneNav(jobId);
     if (!activated) {
       return { type: 'MAPS_FEED_KML_RESULT', protocolVersion: 1, jobId, ok: false, code: 'MyMapsUiChanged' };
     }
@@ -321,6 +344,7 @@ async function handleFeedKml(jobId: JobId, kml: string, fileName: string): Promi
   // (layout 1 — a single pane, already the upload pane), or the nav is now confirmed
   // `aria-selected="true"` (already was, or just activated above).
   const fileInput = await waitForKmlFileInput(PREPARE_TIMEOUT_MS);
+  logStep(jobId, 'feedKml:fileInput', `found=${fileInput !== null}`);
   if (!fileInput) {
     return { type: 'MAPS_FEED_KML_RESULT', protocolVersion: 1, jobId, ok: false, code: 'MyMapsUiChanged' };
   }

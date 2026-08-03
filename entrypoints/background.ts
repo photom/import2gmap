@@ -28,6 +28,15 @@ const MY_MAPS_HOME_URL = 'https://www.google.com/maps/d/u/0/';
 // Chrome always assigns frameId 0 to a tab's top-level document.
 const TOP_FRAME_ID = 0;
 
+// Diagnostic-only: a single greppable prefix for every step-trace line this file emits, so the
+// field can be debugged from the service-worker console alone. Never pass page HTML, shop data,
+// URLs, or map names here — only step names, jobId, frame counts/ids, role strings, and error
+// codes (see docs/reference/extension-error-codes.md §1's "Logging" rule).
+const LOG_PREFIX = '[import2gmap]';
+function logStep(jobId: JobId, step: string, detail?: string): void {
+  console.log(`${LOG_PREFIX} job=${jobId} step=${step}${detail !== undefined ? ` ${detail}` : ''}`);
+}
+
 export default defineBackground(() => {
   const sessionManager = new SessionStorageManager();
 
@@ -117,6 +126,7 @@ export default defineBackground(() => {
   }
 
   async function failExtract(jobId: JobId, code: string): Promise<void> {
+    logStep(jobId, 'extract:failed', `code=${code}`);
     const error: StoredError = { code, message: errorMessageFor(code), retryStep: 'extract', jobId, at: Date.now() };
     await sessionManager.patch({ uiStep: 'error', activeJob: undefined, lastError: error });
     broadcastToPopup({ type: 'EXTRACT_FAILED', protocolVersion: 1, jobId, ...error });
@@ -294,13 +304,21 @@ export default defineBackground(() => {
   // never show up here. Re-injecting also re-executes the script in the top frame every poll
   // tick; mymaps.content.ts guards against re-registering its onMessage listener more than once
   // per document, so this doesn't pile up duplicate listeners there.
-  async function waitForPickerFrame(tabId: number, timeoutMs: number): Promise<number | undefined> {
+  async function waitForPickerFrame(tabId: number, timeoutMs: number, jobId: JobId): Promise<number | undefined> {
     const deadline = Date.now() + timeoutMs;
     for (;;) {
       const results = await browser.scripting.executeScript({
         target: { tabId, allFrames: true },
         files: [MYMAPS_CONTENT_SCRIPT],
       });
+      // One compact line per tick: frame count plus each frame's reported role, so a stall here
+      // can be told apart as "picker frame never injected into" (few/no frames) vs. "found but
+      // no picker role reported" (frames present, no 'picker' among the roles).
+      logStep(
+        jobId,
+        'waitForPickerFrame:tick',
+        `frames=${results.length} roles=${results.map((result) => String(result.result)).join(',')}`,
+      );
       const pickerFrame = results.find((result) => result.result === 'picker');
       if (pickerFrame) {
         return pickerFrame.frameId;
@@ -313,12 +331,14 @@ export default defineBackground(() => {
   }
 
   async function failImport(jobId: JobId, code: string): Promise<void> {
+    logStep(jobId, 'import:failed', `code=${code}`);
     const error: StoredError = { code, message: errorMessageFor(code), retryStep: 'import', jobId, at: Date.now() };
     await sessionManager.patch({ uiStep: 'error', activeJob: undefined, lastError: error });
     broadcastToPopup({ type: 'IMPORT_FAILED', protocolVersion: 1, jobId, ...error });
   }
 
   async function runImportJob(jobId: JobId, mapName: string): Promise<void> {
+    logStep(jobId, 'runImportJob:start');
     try {
       const session = await sessionManager.read();
       if (!session.extractResult) {
@@ -326,12 +346,14 @@ export default defineBackground(() => {
         return;
       }
 
+      logStep(jobId, 'open_tab:start');
       const tab = await browser.tabs.create({ url: MY_MAPS_HOME_URL });
       if (tab.id === undefined) {
         await failImport(jobId, 'MyMapsTabOpenFailed');
         return;
       }
       const tabId = tab.id;
+      logStep(jobId, 'open_tab:ok', `tabId=${tabId}`);
       broadcastToPopup({ type: 'IMPORT_PRELUDE_STARTED', protocolVersion: 1, jobId });
 
       await waitForTabLoaded(tabId);
@@ -341,6 +363,7 @@ export default defineBackground(() => {
       // triggered its click; the click's navigation destroys that script's context before it can
       // observe the outcome, so the worker must poll the tab URL itself and re-inject a fresh
       // content script into the new document before continuing.
+      logStep(jobId, 'MAPS_PREPARE_IMPORT:send');
       const prepareResult = await sendToMapsTab(
         tabId,
         { type: 'MAPS_PREPARE_IMPORT', protocolVersion: 1, jobId },
@@ -350,12 +373,16 @@ export default defineBackground(() => {
         await failImport(jobId, prepareResult?.type === 'MAPS_PREPARE_RESULT' ? prepareResult.code : 'InternalError');
         return;
       }
+      logStep(jobId, 'MAPS_PREPARE_IMPORT:ok');
 
+      logStep(jobId, 'waitForMapCreatedUrl:start');
       const mapCreated = await waitForMapCreatedUrl(tabId, MAP_CREATION_TIMEOUT_MS);
       if (!mapCreated) {
+        logStep(jobId, 'waitForMapCreatedUrl:timeout');
         await failImport(jobId, 'MyMapsUiChanged');
         return;
       }
+      logStep(jobId, 'waitForMapCreatedUrl:ok');
       await ensureContentScript(tabId, MYMAPS_CONTENT_SCRIPT);
 
       // Rename the map to the user's chosen name before opening the KML import dialog, so the
@@ -363,6 +390,7 @@ export default defineBackground(() => {
       // failure, not a best-effort skip: the eventual import_succeeded popup screen asserts
       // 「{mapName}」に{shopCount}件... — if the rename silently failed, that message would name a
       // map that doesn't exist, which is exactly the "no silent false success" ADR-0003 forbids.
+      logStep(jobId, 'MAPS_SET_MAP_TITLE:send');
       const setTitleResult = await sendToMapsTab(
         tabId,
         { type: 'MAPS_SET_MAP_TITLE', protocolVersion: 1, jobId, mapName },
@@ -375,10 +403,12 @@ export default defineBackground(() => {
         );
         return;
       }
+      logStep(jobId, 'MAPS_SET_MAP_TITLE:ok');
 
       // Opening the import dialog (top frame) is what makes Google start loading the KML upload
       // picker — a cross-origin docs.google.com/picker iframe (see messaging protocol §6 / spike
       // results). The file input the user "sees" next only exists inside that iframe, not here.
+      logStep(jobId, 'MAPS_OPEN_IMPORT_DIALOG:send');
       const openDialogResult = await sendToMapsTab(
         tabId,
         { type: 'MAPS_OPEN_IMPORT_DIALOG', protocolVersion: 1, jobId },
@@ -391,15 +421,20 @@ export default defineBackground(() => {
         );
         return;
       }
+      logStep(jobId, 'MAPS_OPEN_IMPORT_DIALOG:ok');
 
-      const pickerFrameId = await waitForPickerFrame(tabId, PICKER_FRAME_TIMEOUT_MS);
+      logStep(jobId, 'waitForPickerFrame:start');
+      const pickerFrameId = await waitForPickerFrame(tabId, PICKER_FRAME_TIMEOUT_MS, jobId);
       if (pickerFrameId === undefined) {
+        logStep(jobId, 'waitForPickerFrame:timeout');
         await failImport(jobId, 'MyMapsUiChanged');
         return;
       }
+      logStep(jobId, 'waitForPickerFrame:ok', `frameId=${pickerFrameId}`);
 
       const kml = new KmlBuilder().build(mapName, session.extractResult.shops);
       const fileName = `${mapName.replace(/[/\\]/g, '_')}.kml`;
+      logStep(jobId, 'MAPS_FEED_KML:send');
       const feedResult = await sendToMapsTab(
         tabId,
         { type: 'MAPS_FEED_KML', protocolVersion: 1, jobId, kml, fileName },
@@ -409,8 +444,10 @@ export default defineBackground(() => {
         await failImport(jobId, feedResult?.type === 'MAPS_FEED_KML_RESULT' ? feedResult.code : 'InternalError');
         return;
       }
+      logStep(jobId, 'MAPS_FEED_KML:ok');
 
       // Success renders back in the top frame (the layer title changing), not the picker iframe.
+      logStep(jobId, 'MAPS_AWAIT_IMPORT_RESULT:send');
       const importResult = await sendToMapsTab(
         tabId,
         { type: 'MAPS_AWAIT_IMPORT_RESULT', protocolVersion: 1, jobId },
@@ -420,10 +457,13 @@ export default defineBackground(() => {
         await failImport(jobId, importResult?.type === 'MAPS_IMPORT_RESULT' ? importResult.code : 'InternalError');
         return;
       }
+      logStep(jobId, 'MAPS_AWAIT_IMPORT_RESULT:ok');
 
       await sessionManager.patch({ uiStep: 'import_succeeded', activeJob: undefined, lastError: undefined });
       broadcastToPopup({ type: 'IMPORT_SUCCEEDED', protocolVersion: 1, jobId });
+      logStep(jobId, 'runImportJob:succeeded');
     } catch {
+      logStep(jobId, 'runImportJob:exception');
       await failImport(jobId, 'InternalError');
     }
   }
