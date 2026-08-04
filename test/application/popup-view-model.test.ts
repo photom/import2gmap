@@ -84,7 +84,7 @@ describe('buildScreenViewModel', () => {
     });
   });
 
-  it('maps error to an error screen carrying code, message, and retry availability', () => {
+  it('maps error to an error screen carrying code, message, retry availability, and retryStep', () => {
     const snapshot: UiStateSnapshot = {
       uiStep: 'error',
       context: 'saved_list',
@@ -95,7 +95,18 @@ describe('buildScreenViewModel', () => {
       code: 'IncompleteCrawl',
       message: '最後まで取得できませんでした。',
       canRetry: true,
+      retryStep: 'extract',
     });
+  });
+
+  it('carries retryStep import for an import-step failure (no Tabelog guidance)', () => {
+    const snapshot: UiStateSnapshot = {
+      uiStep: 'error',
+      context: 'saved_list',
+      error: { code: 'MyMapsUiChanged', message: 'x', retryStep: 'import' },
+    };
+    const view = buildScreenViewModel(snapshot);
+    expect(view.screen === 'error' && view.retryStep).toBe('import');
   });
 
   it('marks canRetry false when retryStep is none', () => {

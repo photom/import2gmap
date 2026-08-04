@@ -133,6 +133,7 @@ The My Maps document itself is renamed to `mapName` as part of the import automa
 | :--- | :--- | :--- |
 | Error code | text | Stable code (e.g. `NotSavedListPage`, `IncompleteCrawl`, `HostPermissionDenied`) |
 | Message | text | Short Japanese explanation |
+| Tabelog guidance (added 2026-08-05) | text | Shown **only** when the failed step's `retryStep` is `extract` (an extraction failure, e.g. `IncompleteCrawl`, `SelectorDrift`, `ReturnToFirstPageFailed`) — asks the user to open/return to the Tabelog 「保存リスト」ページ before retrying. This is a **message**, not automatic navigation; the popup never navigates the user's tab. Not shown for `retryStep: 'import'` (an import-step failure) or `retryStep: 'none'`. |
 | **再試行** | primary | Retries the **failed step** only (extract **or** import start) |
 | **閉じる相当** | secondary | → `ready` or last safe screen without marking success |
 

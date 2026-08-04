@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>テストユーザーさんの保存リストのお店 [食べログ]</title>
+</head>
+<body>
+  <!--
+    Synthetic (not live-captured): a long saved list where Tabelog windows the numbered
+    pagination links, so the numbered "1" link findFirstPageLink normally prefers is not
+    rendered. Used to test the prev-arrow fallback documented in test-plan-phase2.md Module 20.
+  -->
+  <div class="js-rvwr-list-main">
+    <div class="search-condition--hozon">
+      <span class="search-condition__title">保存リスト</span>
+    </div>
+
+    <div id="js-bookmark-list-view" data-list-view="hozon">
+      <div class="rvw-page-count">
+        <p class="c-page-count">
+          <span class="c-page-count__num"><strong>41</strong></span>～<span class="c-page-count__num"><strong>42</strong></span>件を表示／全<span class="c-page-count__num"><strong>100</strong></span>件
+        </p>
+      </div>
+
+      <div class="list-controll">
+        <div class="c-pagination">
+          <ul class="c-pagination__list">
+            <li class="c-pagination__item"><a class="c-pagination__arrow c-pagination__arrow--prev" href="https://tabelog.com/rvwr/test/hozon_restaurants/list/?PG=20">前の20件</a></li>
+            <li class="c-pagination__item"><a class="c-pagination__num" href="https://tabelog.com/rvwr/test/hozon_restaurants/list/?PG=19">19</a></li>
+            <li class="c-pagination__item"><a class="c-pagination__num" href="https://tabelog.com/rvwr/test/hozon_restaurants/list/?PG=20">20</a></li>
+            <li class="c-pagination__item"><strong class="c-pagination__num is-current">21</strong></li>
+            <li class="c-pagination__item"><a class="c-pagination__num" href="https://tabelog.com/rvwr/test/hozon_restaurants/list/?PG=22">22</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

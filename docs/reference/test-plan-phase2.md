@@ -152,6 +152,43 @@ Related: [messaging protocol](extension-messaging-protocol.md) (`PERMISSION_REQU
 
 ---
 
+## Module 20: Return to Page 1 Before Crawl — added 2026-08-05
+
+**Bug** (user report, real-DOM evidence captured on a failing `PG=3` page): `runExtractJob`'s crawl only follows 「次の20件」 forward from wherever the user's tab happens to be. If the user presses 抽出する while sitting on page 2+ of the saved list, the crawl collects fewer shops than the page's declared total (`.c-page-count`'s `全 N 件`) and fails with `IncompleteCrawl`, even though a full crawl from page 1 would have succeeded. Fix: a bounded prelude that detects "not on page 1" and navigates back to page 1 before the existing forward-crawl loop runs.
+
+- [x] **20.1 `TabelogSavedListParser#isBeyondFirstPage`** — pure decision, unit-tested against jsdom fixtures built from the evidence markup.
+  - [ ] `.c-page-count` present with `from > 1` → `true`.
+  - [ ] `.c-page-count` present with `from === 1` → `false`.
+  - [ ] `.c-page-count` absent, `a.c-pagination__arrow--prev` present → `true` (corroborating signal).
+  - [ ] `.c-page-count` absent, no prev arrow, `strong.c-pagination__num.is-current` text `!== '1'` → `true` (second corroborating signal).
+  - [ ] `.c-page-count` absent and no corroborating signal at all → `false` — defaults to "assume page 1", matching the crawl's pre-existing behavior (never a new regression when pagination chrome is genuinely absent, e.g. a true single-page list).
+- [x] **20.2 `TabelogSavedListParser#findFirstPageLink` / `#findPrevPageLink`** — pure element lookup, unit-tested.
+  - [ ] `findFirstPageLink` returns the `a.c-pagination__num` element whose **trimmed text is exactly `'1'`** (never a substring match against e.g. `'10'`, `'21'`).
+  - [ ] `findFirstPageLink` returns `undefined` when no such link is rendered (windowed pagination on long lists, e.g. `… 20 21 22 …` — the evidence file's documented caveat).
+  - [ ] `findPrevPageLink` returns the `a.c-pagination__arrow--prev` element when present, else `undefined`.
+- [x] **20.3 `handleTabGoToFirstPage` (`src/domain/parser/tabelog-extract-handler.ts`)** — pure handler, mirrors `handleTabClickNext`'s reply-then-navigate contract.
+  - [ ] Not a saved-list page → `TAB_EXTRACT_FAILED` `code: 'NotSavedListPage'`.
+  - [ ] Already on page 1 (`isBeyondFirstPage` false) → `TAB_FIRST_PAGE_RESULT` `{ kind: 'already_first' }`, no click triggered.
+  - [ ] Not on page 1, `findFirstPageLink` present → `TAB_FIRST_PAGE_RESULT` `{ kind: 'navigating' }` (worker/content script click the "1" link).
+  - [ ] Not on page 1, no "1" link but `findPrevPageLink` present (windowed pagination) → `TAB_FIRST_PAGE_RESULT` `{ kind: 'navigating' }` (falls back to the prev arrow — see design note below).
+  - [ ] Not on page 1, neither link present → `TAB_EXTRACT_FAILED` `code: 'SelectorDrift'` (page structure drifted from what this feature depends on; reuses the existing generic "page structure differs" code rather than adding a narrow one-off, per KISS).
+- [x] **20.4 Messaging type guards (`src/domain/messaging/message-types.ts`)**
+  - [ ] `isWorkerToContentMessage` accepts `TAB_GO_TO_FIRST_PAGE` with a `jobId`.
+  - [ ] `isContentToWorkerMessage` accepts `TAB_FIRST_PAGE_RESULT` with `kind: 'already_first' | 'navigating'`; rejects an invalid `kind`.
+- [x] **20.5 Content script wiring (`entrypoints/tabelog.content.ts`, thin wrapper, not separately unit-tested — same convention as `TAB_CLICK_NEXT` / Module 8.2)**: on `TAB_GO_TO_FIRST_PAGE`, replies first (§20.3), then — only if `kind: 'navigating'` — clicks the "1" link if present, else the prev arrow.
+- [x] **20.6 Worker orchestration (`entrypoints/background.ts`, not unit-tested — same convention as Phase 3 Module 17)**: `runExtractJob` runs a bounded `returnToFirstPage` prelude (reusing `waitForNavigation` / `ensureContentScript`, the same capture-URL-before-send / reply-before-navigate discipline as `TAB_CLICK_NEXT`) before the existing forward-crawl loop; caps at `MAX_RETURN_TO_FIRST_PAGE_STEPS` round trips, failing explicitly with `ReturnToFirstPageFailed` (new code, [error codes](extension-error-codes.md)) if that bound is exceeded without ever reaching `already_first`.
+
+**Design note — windowed-pagination fallback**: on long saved lists Tabelog windows the page-number links (e.g. `… 20 21 22 …`), so the numbered "1" link this feature prefers (per the user's own DOM evidence) is not always rendered. Rather than synthesizing a `PG=1` URL — which the extraction spec already permits for *forward* crawling (§5.3) but which this feature avoids per the project's "never anchor on positional indices or hashed classes" rule, since it would mean guessing at query-string shape instead of reading a link's own semantics — the fallback repeatedly follows the prev arrow, the same click-and-reinject mechanism `TAB_CLICK_NEXT` already uses for forward crawling, one page at a time until either the "1" link comes into view (as the window shifts toward page 1) or `isBeyondFirstPage` reports `false`. Bounded by `MAX_RETURN_TO_FIRST_PAGE_STEPS` so a genuine drift can't loop forever.
+
+## Module 21: Error Screen — Return-to-Tabelog Guidance — added 2026-08-05
+
+User-requested addition: when extraction fails, the popup's error screen should additionally ask the user to open/return to the Tabelog 保存リストページ before retrying — a **message requesting navigation**, not automatic navigation. Scoped to extraction failures only (`retryStep: 'extract'`); an import-step failure must not show it.
+
+- [x] **21.1 `buildScreenViewModel` (`src/application/popup-view-model.ts`)** — the `error` screen view model carries `retryStep` (in addition to the existing derived `canRetry`), so the popup can distinguish an extract failure from an import failure without re-deriving it from the raw code.
+- [x] **21.2 `entrypoints/popup/App.tsx` (thin wrapper, not unit-tested — same convention as Module 9's React boundary)**: the `error` screen renders one extra short guidance line only when `view.retryStep === 'extract'`.
+
+---
+
 ## Out of scope for Phase 2
 
 - My Maps content script (`mymaps.content.ts`) DOM automation — gated by the ADR-0004 spike; only the `IMPORT_START` prelude (Module 7.8) is covered here.

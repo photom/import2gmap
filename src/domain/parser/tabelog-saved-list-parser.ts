@@ -99,6 +99,39 @@ export class TabelogSavedListParser {
     return document.querySelector('a.c-pagination__arrow.c-pagination__arrow--next[rel="next"]') !== null;
   }
 
+  // "Am I on page 1?" — `from > 1` from the count chrome is the primary, clean semantic signal
+  // (see the PG=3 field evidence: `from: 41` unambiguously means "not page 1"). When that chrome
+  // is absent, fall back to corroborating pagination signals rather than guessing; if none of
+  // those are present either, default to `false` (assume page 1) — that matches the crawl's
+  // pre-existing behavior, so an ambiguous page never becomes a *new* failure mode.
+  isBeyondFirstPage(document: Document): boolean {
+    const pageCount = this.parsePageCount(document);
+    if (pageCount) {
+      return pageCount.from > 1;
+    }
+    if (this.findPrevPageLink(document) !== undefined) {
+      return true;
+    }
+    const currentPageText = document.querySelector('strong.c-pagination__num.is-current')?.textContent?.trim();
+    return currentPageText !== undefined && currentPageText !== '1';
+  }
+
+  // The numbered "1" link the user pointed at directly. Matched by trimmed text, never a
+  // positional/index assumption — on long lists Tabelog windows the numbered links (e.g.
+  // `… 20 21 22 …`), so this can legitimately return `undefined`; callers fall back to
+  // `findPrevPageLink`.
+  findFirstPageLink(document: Document): HTMLAnchorElement | undefined {
+    return Array.from(document.querySelectorAll<HTMLAnchorElement>('a.c-pagination__num')).find(
+      (link) => link.textContent?.trim() === '1',
+    );
+  }
+
+  findPrevPageLink(document: Document): HTMLAnchorElement | undefined {
+    return (
+      document.querySelector<HTMLAnchorElement>('a.c-pagination__arrow.c-pagination__arrow--prev') ?? undefined
+    );
+  }
+
   detectSavedListPage(document: Document): boolean {
     const hasListMain = document.querySelector('.js-rvwr-list-main') !== null;
     const hasSearchCondition = document.querySelector('.search-condition--hozon') !== null;

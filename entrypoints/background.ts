@@ -30,6 +30,10 @@ const MAP_CREATION_TIMEOUT_MS = 15_000;
 // single-shot picker-frame timeout (15s) so there's real room for at least one rediscovery-and-resend.
 const FEED_KML_RETRY_TIMEOUT_MS = 20_000;
 const NAVIGATION_POLL_INTERVAL_MS = 300;
+// Safety bound on returnToFirstPage's prev-arrow fallback loop (one page per round trip) — see
+// its comment. Generous enough for very long saved lists; only ever hit on a genuine drift/stall,
+// since each successful step strictly decreases the remaining distance to page 1.
+const MAX_RETURN_TO_FIRST_PAGE_STEPS = 50;
 const MY_MAPS_HOME_URL = 'https://www.google.com/maps/d/u/0/';
 // Chrome always assigns frameId 0 to a tab's top-level document.
 const TOP_FRAME_ID = 0;
@@ -212,9 +216,50 @@ export default defineBackground(() => {
     }
   }
 
+  // Bounded prelude run once before the forward crawl: if the user started 抽出する while sitting
+  // on page 2+ of the saved list, the forward-only crawl below would collect fewer shops than the
+  // page declares and fail with IncompleteCrawl even though a full crawl from page 1 would have
+  // succeeded (real-DOM field report, PG=3). Reuses the exact reply-before-navigate discipline
+  // TAB_CLICK_NEXT already established: capture the tab URL before sending, and only
+  // waitForNavigation/re-inject when the content script says it's about to click something.
+  // Returns true once the content script confirms `already_first`; false after having already
+  // called failExtract (SelectorDrift / the content script's own detection failure / exceeding
+  // MAX_RETURN_TO_FIRST_PAGE_STEPS via ReturnToFirstPageFailed) — the caller must return without
+  // starting the crawl loop.
+  async function returnToFirstPage(tabId: number, jobId: JobId): Promise<boolean> {
+    for (let step = 0; step < MAX_RETURN_TO_FIRST_PAGE_STEPS; step++) {
+      const currentPageUrl = (await browser.tabs.get(tabId)).url;
+      const result = await sendToTab(tabId, { type: 'TAB_GO_TO_FIRST_PAGE', protocolVersion: 1, jobId });
+      if (!result) {
+        await failExtract(jobId, 'InternalError');
+        return false;
+      }
+      if (result.type === 'TAB_EXTRACT_FAILED') {
+        await failExtract(jobId, result.code);
+        return false;
+      }
+      if (result.type !== 'TAB_FIRST_PAGE_RESULT') {
+        await failExtract(jobId, 'InternalError');
+        return false;
+      }
+      if (result.kind === 'already_first') {
+        return true;
+      }
+      await waitForNavigation(tabId, currentPageUrl);
+      await ensureContentScript(tabId, TABELOG_CONTENT_SCRIPT);
+    }
+    await failExtract(jobId, 'ReturnToFirstPageFailed');
+    return false;
+  }
+
   async function runExtractJob(tabId: number, jobId: JobId): Promise<void> {
     try {
       await ensureContentScript(tabId, TABELOG_CONTENT_SCRIPT);
+
+      const reachedFirstPage = await returnToFirstPage(tabId, jobId);
+      if (!reachedFirstPage) {
+        return;
+      }
 
       const shops: StoredShop[] = [];
       const seenUrls = new Set<string>();

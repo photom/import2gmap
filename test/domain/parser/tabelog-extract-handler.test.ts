@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { handleTabClickNext, handleTabExtractPage } from '../../../src/domain/parser/tabelog-extract-handler';
+import {
+  handleTabClickNext,
+  handleTabExtractPage,
+  handleTabGoToFirstPage,
+} from '../../../src/domain/parser/tabelog-extract-handler';
 import { loadFixtureDocument } from '../../helpers/load-fixture-document';
 
 describe('handleTabExtractPage', () => {
@@ -51,5 +55,72 @@ describe('handleTabClickNext', () => {
     const result = handleTabClickNext(doc, 'job-1');
 
     expect(result).toEqual({ type: 'TAB_NEXT_RESULT', protocolVersion: 1, jobId: 'job-1', kind: 'no_next' });
+  });
+});
+
+describe('handleTabGoToFirstPage', () => {
+  it('returns TAB_EXTRACT_FAILED with NotSavedListPage for a non-saved-list page', () => {
+    const doc = loadFixtureDocument('not-saved-list.html');
+
+    const result = handleTabGoToFirstPage(doc, 'job-1');
+
+    expect(result).toEqual({
+      type: 'TAB_EXTRACT_FAILED',
+      protocolVersion: 1,
+      jobId: 'job-1',
+      code: 'NotSavedListPage',
+    });
+  });
+
+  it('returns already_first when already on page 1', () => {
+    const doc = loadFixtureDocument('saved-list-single-page.html');
+
+    const result = handleTabGoToFirstPage(doc, 'job-1');
+
+    expect(result).toEqual({
+      type: 'TAB_FIRST_PAGE_RESULT',
+      protocolVersion: 1,
+      jobId: 'job-1',
+      kind: 'already_first',
+    });
+  });
+
+  it('returns navigating when not on page 1 and the "1" link is present', () => {
+    const doc = loadFixtureDocument('saved-list-multi-page-pg2.html');
+
+    const result = handleTabGoToFirstPage(doc, 'job-1');
+
+    expect(result).toEqual({
+      type: 'TAB_FIRST_PAGE_RESULT',
+      protocolVersion: 1,
+      jobId: 'job-1',
+      kind: 'navigating',
+    });
+  });
+
+  it('falls back to the prev arrow (navigating) when pagination is windowed and no "1" link is rendered', () => {
+    const doc = loadFixtureDocument('saved-list-pagination-windowed.html');
+
+    const result = handleTabGoToFirstPage(doc, 'job-1');
+
+    expect(result).toEqual({
+      type: 'TAB_FIRST_PAGE_RESULT',
+      protocolVersion: 1,
+      jobId: 'job-1',
+      kind: 'navigating',
+    });
+  });
+
+  it('returns TAB_EXTRACT_FAILED with SelectorDrift when not on page 1 but no navigation link exists', () => {
+    const doc = loadFixtureDocument('saved-list-pagination-drift.html');
+
+    const result = handleTabGoToFirstPage(doc, 'job-1');
+
+    expect(result).toEqual({
+      type: 'TAB_EXTRACT_FAILED',
+      protocolVersion: 1,
+      jobId: 'job-1',
+      code: 'SelectorDrift',
+    });
   });
 });

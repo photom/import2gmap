@@ -15,4 +15,8 @@ describe('ERROR_MESSAGES', () => {
   it('has a message for MyMapsTabOpenFailed', () => {
     expect(ERROR_MESSAGES.MyMapsTabOpenFailed).toBe('Googleマイマップのタブを開けませんでした。');
   });
+
+  it('has a message for ReturnToFirstPageFailed', () => {
+    expect(ERROR_MESSAGES.ReturnToFirstPageFailed).toBe('保存リストの1ページ目に戻れませんでした。');
+  });
 });

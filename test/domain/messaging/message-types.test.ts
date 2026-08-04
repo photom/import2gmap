@@ -122,8 +122,8 @@ describe('isPopupToWorkerMessage', () => {
 });
 
 describe('isWorkerToContentMessage', () => {
-  it('accepts TAB_EXTRACT_PAGE, TAB_CLICK_NEXT, TAB_ABORT with a jobId', () => {
-    for (const type of ['TAB_EXTRACT_PAGE', 'TAB_CLICK_NEXT', 'TAB_ABORT']) {
+  it('accepts TAB_EXTRACT_PAGE, TAB_GO_TO_FIRST_PAGE, TAB_CLICK_NEXT, TAB_ABORT with a jobId', () => {
+    for (const type of ['TAB_EXTRACT_PAGE', 'TAB_GO_TO_FIRST_PAGE', 'TAB_CLICK_NEXT', 'TAB_ABORT']) {
       expect(isWorkerToContentMessage({ type, protocolVersion: 1, jobId: 'job-1' })).toBe(true);
     }
   });
@@ -144,6 +144,36 @@ describe('isContentToWorkerMessage', () => {
         catalogDelta: [],
       }),
     ).toBe(true);
+  });
+
+  it('accepts TAB_FIRST_PAGE_RESULT with a valid kind', () => {
+    expect(
+      isContentToWorkerMessage({
+        type: 'TAB_FIRST_PAGE_RESULT',
+        protocolVersion: 1,
+        jobId: 'job-1',
+        kind: 'already_first',
+      }),
+    ).toBe(true);
+    expect(
+      isContentToWorkerMessage({
+        type: 'TAB_FIRST_PAGE_RESULT',
+        protocolVersion: 1,
+        jobId: 'job-1',
+        kind: 'navigating',
+      }),
+    ).toBe(true);
+  });
+
+  it('rejects TAB_FIRST_PAGE_RESULT with an invalid kind', () => {
+    expect(
+      isContentToWorkerMessage({
+        type: 'TAB_FIRST_PAGE_RESULT',
+        protocolVersion: 1,
+        jobId: 'job-1',
+        kind: 'sideways',
+      }),
+    ).toBe(false);
   });
 
   it('accepts TAB_NEXT_RESULT with a valid kind', () => {

@@ -1,4 +1,4 @@
-import type { ExtractProgress, UiStateSnapshot } from '../domain/messaging/message-types';
+import type { ExtensionErrorPayload, ExtractProgress, UiStateSnapshot } from '../domain/messaging/message-types';
 
 export type ScreenViewModel =
   | { readonly screen: 'ready'; readonly extractEnabled: true }
@@ -8,7 +8,15 @@ export type ScreenViewModel =
   | { readonly screen: 'confirm'; readonly shopCount?: number; readonly collectionCount?: number; readonly mapName?: string }
   | { readonly screen: 'import_starting' }
   | { readonly screen: 'import_succeeded'; readonly shopCount?: number; readonly mapName?: string }
-  | { readonly screen: 'error'; readonly code: string; readonly message: string; readonly canRetry: boolean };
+  | {
+      readonly screen: 'error';
+      readonly code: string;
+      readonly message: string;
+      readonly canRetry: boolean;
+      // Carried so the popup can show the "go back to the Tabelog saved list" guidance only for
+      // an extraction failure, never for an import-step failure — see extension-ui-specifications.md §3.7.
+      readonly retryStep: ExtensionErrorPayload['retryStep'];
+    };
 
 export function buildScreenViewModel(snapshot: UiStateSnapshot): ScreenViewModel {
   switch (snapshot.uiStep) {
@@ -42,6 +50,7 @@ export function buildScreenViewModel(snapshot: UiStateSnapshot): ScreenViewModel
         code: snapshot.error?.code ?? 'InternalError',
         message: snapshot.error?.message ?? '予期しないエラーが発生しました。',
         canRetry: snapshot.error?.retryStep !== 'none',
+        retryStep: snapshot.error?.retryStep ?? 'none',
       };
   }
 }

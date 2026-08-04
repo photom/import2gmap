@@ -57,6 +57,7 @@ sequenceDiagram
   Popup->>Worker: EXTRACT_START
   Worker->>Session: activeJob extract
   Worker->>Tab: scripting.executeScript
+  Note over Worker,CS: return-to-page-1 prelude (§9) omitted here — assumes the tab was already on page 1
   Worker->>CS: TAB_EXTRACT_PAGE
   CS->>Worker: TAB_PAGE_RESULT
   Worker->>Popup: EXTRACT_PROGRESS
@@ -233,3 +234,33 @@ either path a no-op) and both clear `pendingPermission`.
 - Progress events may arrive with no popup listener; that is OK. Session `activeJob.progress` is the reconnect source of truth.
 - After navigation (`TAB_NEXT_RESULT navigating`), worker waits for tab `status complete` (or equivalent) before `TAB_EXTRACT_PAGE` again; timeout → `ExtractTimeout` / `TabNavigatedAway` as appropriate.
 - Completeness uses extraction spec rules; failure → `IncompleteCrawl`.
+
+---
+
+## 9. Return-to-page-1 prelude (added 2026-08-05)
+
+Runs once, right after the first `scripting.executeScript`, before the happy-path sequence in §2.
+See [messaging protocol §5a](extension-messaging-protocol.md#5a-return-to-page-1-prelude--added-2026-08-05)
+and [extraction spec §5.2a](tabelog-pc-saved-list-extraction-spec.md#52a-return-to-page-1-prelude--added-2026-08-05).
+
+```mermaid
+sequenceDiagram
+  participant Worker
+  participant Tab as TabelogTab
+  participant CS as TabelogContentScript
+
+  Worker->>Tab: scripting.executeScript
+  loop until already_first (bounded)
+    Worker->>CS: TAB_GO_TO_FIRST_PAGE
+    CS->>Worker: TAB_FIRST_PAGE_RESULT
+    alt kind: navigating
+      Note over Tab: location changes (numbered "1" link, or prev arrow fallback)
+      Worker->>Worker: waitForNavigation + re-inject
+    end
+  end
+  Note over Worker: kind: already_first -> proceed to the normal crawl (§2)
+```
+
+Any `TAB_EXTRACT_FAILED` reply, or exceeding the bounded retry count, ends the job with
+`EXTRACT_FAILED` (`SelectorDrift` / `ReturnToFirstPageFailed`) exactly like §6 — the crawl loop
+never starts.

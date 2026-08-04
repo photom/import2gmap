@@ -47,6 +47,7 @@ Related: [extraction spec](tabelog-pc-saved-list-extraction-spec.md), [UI spec](
 | `BookmarksDataInvalid` | コレクション情報の読み取りに失敗しました。 | `extract` | `#js-bookmarks-data` present but invalid |
 | `CollectionCatalogInvalid` | コレクション一覧の読み取りに失敗しました。 | `extract` | `#js-collection` present but invalid |
 | `IncompleteCrawl` | 表示件数と抽出件数が一致しません。最後まで取得できませんでした。 | `extract` | unique shops ≠ declared total |
+| `ReturnToFirstPageFailed` | 保存リストの1ページ目に戻れませんでした。 | `extract` | Return-to-page-1 prelude exceeded its bounded retry count without reaching page 1 (added 2026-08-05, see [extraction spec §5.2a](tabelog-pc-saved-list-extraction-spec.md#52a-return-to-page-1-prelude--added-2026-08-05)) |
 | `ExtractCancelled` | 抽出をキャンセルしました。 | `none` | User cancel (not shown as hard error if returning to `ready`; use if `error` screen is shown) |
 | `TabNavigatedAway` | 抽出中にページが移動したため中断しました。 | `extract` | Tab URL left saved-list unexpectedly |
 | `TabClosed` | 抽出中のタブが閉じられました。 | `extract` | Target tab gone |

@@ -12,6 +12,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   BookmarksDataInvalid: 'コレクション情報の読み取りに失敗しました。',
   CollectionCatalogInvalid: 'コレクション一覧の読み取りに失敗しました。',
   IncompleteCrawl: '表示件数と抽出件数が一致しません。最後まで取得できませんでした。',
+  ReturnToFirstPageFailed: '保存リストの1ページ目に戻れませんでした。',
   ExtractCancelled: '抽出をキャンセルしました。',
   TabNavigatedAway: '抽出中にページが移動したため中断しました。',
   TabClosed: '抽出中のタブが閉じられました。',

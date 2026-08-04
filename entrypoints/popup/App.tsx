@@ -209,6 +209,9 @@ export default function App() {
         <section>
           <p>{view.code}</p>
           <p>{view.message}</p>
+          {view.retryStep === 'extract' && (
+            <p className="hint">食べログの「保存リスト」ページに戻ってから、再試行してください。</p>
+          )}
           {view.canRetry ? (
             <button onClick={() => void sendAndRefresh({ type: 'ERROR_RETRY', protocolVersion: 1 })}>
               再試行

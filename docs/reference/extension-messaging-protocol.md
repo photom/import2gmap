@@ -115,6 +115,7 @@ Injected only for an active extract job.
 
 | `type` | Fields | Meaning |
 | :--- | :--- | :--- |
+| `TAB_GO_TO_FIRST_PAGE` | `{ protocolVersion, jobId }` | **Added 2026-08-05** — bounded prelude, sent once before the first `TAB_EXTRACT_PAGE`: return to page 1 if the crawl didn't start there. See §5a. |
 | `TAB_EXTRACT_PAGE` | `{ protocolVersion, jobId }` | Parse current document: items + labels + catalog page slice |
 | `TAB_CLICK_NEXT` | `{ protocolVersion, jobId }` | Activate next-page control or report no-next |
 | `TAB_ABORT` | `{ protocolVersion, jobId }` | Stop cooperating; ignore further work for this job |
@@ -124,6 +125,7 @@ Injected only for an active extract job.
 | `type` | Fields | Meaning |
 | :--- | :--- | :--- |
 | `TAB_PAGE_RESULT` | `{ protocolVersion, jobId, shops, catalogDelta, pageMeta }` | One page extract |
+| `TAB_FIRST_PAGE_RESULT` | `{ protocolVersion, jobId, kind: "already_first" \| "navigating" }` | **Added 2026-08-05** — reply to `TAB_GO_TO_FIRST_PAGE`. See §5a. |
 | `TAB_NEXT_RESULT` | `{ protocolVersion, jobId, kind: "navigating" \| "no_next" }` | After next attempt |
 | `TAB_EXTRACT_FAILED` | `{ protocolVersion, jobId, code, detail? }` | Page-level failure |
 
@@ -134,6 +136,32 @@ Worker merges shops/catalog, drives pagination, enforces completeness, writes se
 **Navigation constraint**: `TAB_NEXT_RESULT.kind: "navigating"` means the content script is about to click the next-page arrow — it replies *first*, then clicks (the click is the last thing it does), because the resulting page navigation destroys its execution context. Because the reply arrives before the click, the worker cannot tell "navigation done" from "navigation hasn't started yet" using tab status alone (the tab can still report `status: 'complete'` for the *old* page for a brief window right after the reply) — it must capture the tab's URL before sending `TAB_CLICK_NEXT` and then wait for both the URL to change *and* `status: 'complete'`, bounded by a timeout. Only once that navigation is confirmed does the worker **re-inject the content script into the new document** before sending the next `TAB_EXTRACT_PAGE` — a programmatically injected `registration: 'runtime'` content script is not auto-reinjected by WXT after a navigation.
 
 Content scripts must **not** write `chrome.storage.session` in v1.
+
+---
+
+## 5a. Return-to-page-1 prelude — added 2026-08-05
+
+Root cause this section fixes: the crawl in §5 only ever follows the next-page arrow **forward**
+from whatever page the tab was on when 抽出する was pressed. A user sitting on page 2+ of the
+saved list (e.g. from browsing before extracting) would get fewer shops than the page's declared
+total and an explicit `IncompleteCrawl` — see [extraction spec §5.2a](tabelog-pc-saved-list-extraction-spec.md#52a-return-to-page-1-prelude--added-2026-08-05)
+for the full detection/navigation design (including the windowed-pagination fallback).
+
+`runExtractJob` (`entrypoints/background.ts`) runs a bounded `returnToFirstPage` loop immediately
+after the first `ensureContentScript`, before the existing forward-crawl loop:
+
+1. Send `TAB_GO_TO_FIRST_PAGE`.
+2. `kind: "already_first"` → prelude done; proceed to the normal crawl (§5).
+3. `kind: "navigating"` → same **reply-first-then-navigate** discipline as `TAB_CLICK_NEXT`: the
+   content script has already clicked (or is about to click) a pagination link by the time this
+   reply is observed, so the worker captures the tab's URL **before** sending the message, then
+   `waitForNavigation` + re-injects, then repeats from step 1.
+4. `TAB_EXTRACT_FAILED` (`NotSavedListPage` from the pre-check, or `SelectorDrift` when pagination
+   chrome says "not page 1" but no navigable link exists) → explicit `EXTRACT_FAILED`, prelude
+   aborts, crawl never starts.
+5. Steps 1–3 repeat at most `MAX_RETURN_TO_FIRST_PAGE_STEPS` times (worker-side constant); if page
+   1 still isn't reached, explicit `EXTRACT_FAILED` with `ReturnToFirstPageFailed` — never a silent
+   partial crawl (ADR-0003).
 
 ---
 

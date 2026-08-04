@@ -1,4 +1,9 @@
-import { handleTabClickNext, handleTabExtractPage } from '@/src/domain/parser/tabelog-extract-handler';
+import {
+  handleTabClickNext,
+  handleTabExtractPage,
+  handleTabGoToFirstPage,
+  resolveFirstPageNavigationLink,
+} from '@/src/domain/parser/tabelog-extract-handler';
 import { isWorkerToContentMessage } from '@/src/domain/messaging/message-types';
 
 export default defineContentScript({
@@ -22,6 +27,15 @@ export default defineContentScript({
 
       if (rawMessage.type === 'TAB_EXTRACT_PAGE') {
         sendResponse(handleTabExtractPage(document, rawMessage.jobId));
+        return undefined;
+      }
+
+      if (rawMessage.type === 'TAB_GO_TO_FIRST_PAGE') {
+        const result = handleTabGoToFirstPage(document, rawMessage.jobId);
+        sendResponse(result);
+        if (result.type === 'TAB_FIRST_PAGE_RESULT' && result.kind === 'navigating') {
+          resolveFirstPageNavigationLink(document)?.click();
+        }
         return undefined;
       }
 

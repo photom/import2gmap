@@ -89,6 +89,10 @@ export function isPopupToWorkerMessage(value: unknown): value is PopupToWorkerMe
 
 export type WorkerToContentMessage =
   | { readonly type: 'TAB_EXTRACT_PAGE'; readonly protocolVersion: ProtocolVersion; readonly jobId: JobId }
+  // Sent as a bounded prelude, before the first TAB_EXTRACT_PAGE, so the crawl always starts from
+  // page 1 regardless of which page the user's tab was on — see entrypoints/background.ts's
+  // `returnToFirstPage` and extension-messaging-protocol.md §5.
+  | { readonly type: 'TAB_GO_TO_FIRST_PAGE'; readonly protocolVersion: ProtocolVersion; readonly jobId: JobId }
   | { readonly type: 'TAB_CLICK_NEXT'; readonly protocolVersion: ProtocolVersion; readonly jobId: JobId }
   | { readonly type: 'TAB_ABORT'; readonly protocolVersion: ProtocolVersion; readonly jobId: JobId };
 
@@ -99,7 +103,12 @@ export function isWorkerToContentMessage(value: unknown): value is WorkerToConte
   if (!isNonEmptyString(value.jobId)) {
     return false;
   }
-  return value.type === 'TAB_EXTRACT_PAGE' || value.type === 'TAB_CLICK_NEXT' || value.type === 'TAB_ABORT';
+  return (
+    value.type === 'TAB_EXTRACT_PAGE' ||
+    value.type === 'TAB_GO_TO_FIRST_PAGE' ||
+    value.type === 'TAB_CLICK_NEXT' ||
+    value.type === 'TAB_ABORT'
+  );
 }
 
 export type ContentToWorkerMessage =
@@ -110,6 +119,12 @@ export type ContentToWorkerMessage =
       readonly shops: readonly unknown[];
       readonly catalogDelta: readonly unknown[];
       readonly pageMeta?: { readonly currentPage?: number; readonly totalShopsDeclared?: number };
+    }
+  | {
+      readonly type: 'TAB_FIRST_PAGE_RESULT';
+      readonly protocolVersion: ProtocolVersion;
+      readonly jobId: JobId;
+      readonly kind: 'already_first' | 'navigating';
     }
   | {
       readonly type: 'TAB_NEXT_RESULT';
@@ -135,6 +150,8 @@ export function isContentToWorkerMessage(value: unknown): value is ContentToWork
   switch (value.type) {
     case 'TAB_PAGE_RESULT':
       return Array.isArray(value.shops) && Array.isArray(value.catalogDelta);
+    case 'TAB_FIRST_PAGE_RESULT':
+      return value.kind === 'already_first' || value.kind === 'navigating';
     case 'TAB_NEXT_RESULT':
       return value.kind === 'navigating' || value.kind === 'no_next';
     case 'TAB_EXTRACT_FAILED':

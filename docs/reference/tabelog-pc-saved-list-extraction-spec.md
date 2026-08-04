@@ -195,6 +195,34 @@ Interpret three numbers in document order as `from`, `to`, `total` when present 
 
 Page index appears in link query as `PG={n}` (1-based).
 
+### 5.2a Return-to-page-1 prelude — added 2026-08-05
+
+The crawl (§5.3) only ever follows the next-page arrow forward from wherever it starts. If the
+user presses 抽出する while sitting on page 2+ of the saved list (e.g. from browsing before
+extracting), a forward-only crawl collects fewer shops than the declared total and fails with
+`IncompleteCrawl` — the crawl needs to be back on page 1 first. This is a **bounded prelude**,
+run once before step 1 of §5.3, driven by a new worker ↔ content-script message pair
+(`TAB_GO_TO_FIRST_PAGE` / `TAB_FIRST_PAGE_RESULT`, see [messaging protocol §5](extension-messaging-protocol.md#5-service-worker--tabelog-content-script)):
+
+1. **Detect "not on page 1"**: prefer the count chrome's `from` value (§5.1) — `from > 1` is an
+   unambiguous semantic signal. When `.c-page-count` is absent, fall back to corroborating
+   pagination signals in order: the prev arrow (§5.2) being present, then the current-page
+   marker's own text (`strong.c-pagination__num.is-current`) differing from `"1"`. If none of
+   these signals is present, default to "already on page 1" — this matches the crawl's
+   pre-existing behavior, so an ambiguous page is never a *new* failure mode.
+2. **Navigate back to page 1**: prefer clicking the numbered `a.c-pagination__num` link whose
+   trimmed text is exactly `"1"` (the link the user pointed at directly in their own DOM
+   evidence). On long lists Tabelog **windows** the numbered links (e.g. `… 20 21 22 …`), so that
+   link may not be rendered — in that case, fall back to the prev arrow (§5.2), one page at a
+   time, re-evaluating step 1 after each navigation until either the "1" link comes into view or
+   page 1 is reached. This fallback was chosen over synthesizing a `PG=1` URL (which §5.3 already
+   permits for *forward* crawling) because it never anchors on the `PG` query-string shape or a
+   positional index — only on a link's own text/class semantics, same as the rest of this spec.
+   Bounded by a fixed retry count; exceeding it without reaching page 1 is an explicit failure
+   (`ReturnToFirstPageFailed`), never a silent partial crawl.
+3. Neither the "1" link nor the prev arrow present, while step 1 says we're not on page 1 → page
+   structure has drifted from what this feature depends on; explicit failure (`SelectorDrift`).
+
 ### 5.3 Crawl procedure
 
 1. Confirm page detection (Section 2).
