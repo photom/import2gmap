@@ -4,9 +4,13 @@ import {
   hasCreatedNewMap,
   hasImportSucceeded,
   hasMapTitleApplied,
+  hasPickerFrameContent,
   isLoggedOutRedirect,
+  isPickerFrameReady,
+  isPickerSpinnerActive,
   isPickerUploadNavLabel,
   isPickerUploadNavSelected,
+  pickerActivationKeyEventInit,
 } from '../../../src/domain/my-maps/my-maps-detectors';
 
 describe('isLoggedOutRedirect', () => {
@@ -118,5 +122,81 @@ describe('isPickerUploadNavSelected', () => {
 
   it('returns false when aria-selected is null (attribute absent / option not found)', () => {
     expect(isPickerUploadNavSelected(null)).toBe(false);
+  });
+});
+
+describe('pickerActivationKeyEventInit', () => {
+  it('returns a keydown init for Enter with a non-zero keyCode/which (a bare KeyboardEvent leaves keyCode at 0)', () => {
+    expect(pickerActivationKeyEventInit('Enter')).toEqual({
+      key: 'Enter',
+      code: 'Enter',
+      keyCode: 13,
+      which: 13,
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+    });
+  });
+
+  it('returns a keydown init for Space', () => {
+    expect(pickerActivationKeyEventInit(' ')).toEqual({
+      key: ' ',
+      code: 'Space',
+      keyCode: 32,
+      which: 32,
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+    });
+  });
+});
+
+describe('hasPickerFrameContent', () => {
+  it('returns true when the upload-nav option is present', () => {
+    expect(hasPickerFrameContent(true, false)).toBe(true);
+  });
+
+  it('returns true when the strict KML file input is present', () => {
+    expect(hasPickerFrameContent(false, true)).toBe(true);
+  });
+
+  it('returns false when neither is present yet (still-loading frame)', () => {
+    expect(hasPickerFrameContent(false, false)).toBe(false);
+  });
+});
+
+describe('isPickerFrameReady', () => {
+  it('returns true for a picker-role result with content', () => {
+    expect(isPickerFrameReady({ role: 'picker', hasPickerContent: true })).toBe(true);
+  });
+
+  it('returns false for a picker-role result that has not rendered content yet', () => {
+    expect(isPickerFrameReady({ role: 'picker', hasPickerContent: false })).toBe(false);
+  });
+
+  it('returns false for a mymaps-role result', () => {
+    expect(isPickerFrameReady({ role: 'mymaps', hasPickerContent: false })).toBe(false);
+  });
+
+  it('returns false for undefined (an injection error / skipped frame)', () => {
+    expect(isPickerFrameReady(undefined)).toBe(false);
+  });
+
+  it('returns false for the old bare-string "picker" shape (hostname-only match is no longer accepted)', () => {
+    expect(isPickerFrameReady('picker')).toBe(false);
+  });
+});
+
+describe('isPickerSpinnerActive', () => {
+  it('returns false when data-active is "false"', () => {
+    expect(isPickerSpinnerActive('false', null)).toBe(false);
+  });
+
+  it('returns false when aria-hidden is "true"', () => {
+    expect(isPickerSpinnerActive(null, 'true')).toBe(false);
+  });
+
+  it('returns true when neither finished-state marker is present (still loading)', () => {
+    expect(isPickerSpinnerActive(null, null)).toBe(true);
   });
 });

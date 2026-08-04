@@ -54,3 +54,52 @@ export function isPickerUploadNavLabel(text: string): boolean {
 export function isPickerUploadNavSelected(ariaSelected: string | null): boolean {
   return ariaSelected === 'true';
 }
+
+// A second field report (2026-08-05, this file's spike results §3 third addendum) showed the
+// second picker-v2 fix still stalled: the live DOM snapshot had the upload-nav option at
+// `tabindex="0"` (i.e. `option.focus()` had run — that's the only place this flow calls `.focus()`)
+// while `aria-selected` stayed `"false"`. A bare `new KeyboardEvent('keydown', {key: 'Enter'})`
+// leaves `keyCode`/`which` at `0` (they're not derived from `key`), and Closure/jsaction keydown
+// handlers routinely branch on that legacy field — so the keyboard activation strategies were very
+// likely no-ops. `code` is included too since some handlers key off it instead of `keyCode`.
+export function pickerActivationKeyEventInit(key: 'Enter' | ' '): KeyboardEventInit {
+  const keyCode = key === 'Enter' ? 13 : 32;
+  const code = key === 'Enter' ? 'Enter' : 'Space';
+  return { key, code, keyCode, which: keyCode, bubbles: true, cancelable: true, composed: true };
+}
+
+// Whether a `docs.google.com`-hostname frame has actually rendered picker UI yet — used to make
+// picker-frame discovery content-aware instead of hostname-only (hypothesis 0.1, spike results §3
+// third addendum): the instant a `docs.google.com` frame exists it may still be blank/loading, and
+// (defensively) a nested `docs.google.com` frame inside the picker gadget would report the right
+// hostname while never rendering either of these. Reuses the same two anchors `handleFeedKml`
+// itself already polls for as "the picker is ready".
+export function hasPickerFrameContent(hasUploadNavOption: boolean, hasStrictFileInput: boolean): boolean {
+  return hasUploadNavOption || hasStrictFileInput;
+}
+
+export type MapsFrameDetectionResult = {
+  readonly role: MapsFrameRole;
+  readonly hasPickerContent: boolean;
+};
+
+// Narrows an `executeScript` injection result's `result` field (the content script's `main()`
+// return value — see `waitForPickerFrame` in entrypoints/background.ts) to "this is the real,
+// ready picker frame". Replaces the old hostname-only `result === 'picker'` check, which could
+// latch onto a still-loading or (if Google ever nests one) unrelated `docs.google.com` frame and
+// never revisit that choice.
+export function isPickerFrameReady(value: unknown): value is { role: 'picker'; hasPickerContent: true } {
+  if (typeof value !== 'object' || value === null) return false;
+  const candidate = value as { role?: unknown; hasPickerContent?: unknown };
+  return candidate.role === 'picker' && candidate.hasPickerContent === true;
+}
+
+// The picker v2 app renders its dialog/nav DOM progressively; a synthetic event dispatched before
+// its own event dispatcher has finished wiring up can be silently dropped (hypothesis 0.4, spike
+// results §3 third addendum). The loading spinner (`jsname="aZ2wEe"`) was observed carrying
+// `data-active="false"` and/or `aria-hidden="true"` once the app has finished loading — either
+// marker present means "settled, not spinning". Absence of the spinner element itself is handled
+// by the content-script caller (no spinner found = nothing to wait on), not here.
+export function isPickerSpinnerActive(dataActive: string | null, ariaHidden: string | null): boolean {
+  return dataActive !== 'false' && ariaHidden !== 'true';
+}

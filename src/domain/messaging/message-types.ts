@@ -209,6 +209,11 @@ export type MapsToWorkerMessage =
       readonly type: 'MAPS_FEED_KML_RESULT';
       readonly protocolVersion: ProtocolVersion;
       readonly jobId: JobId;
+      // Picker-frame step trace, forwarded so entrypoints/background.ts can re-log it to the
+      // service-worker console — a content script's own console.log only ever reaches the picker
+      // frame's own (invisible-to-the-user) console. See docs/reference/extension-error-codes.md
+      // §1's "Logging" rule: step names, jobId, booleans, aria/role strings only, never page HTML.
+      readonly diagnostics?: readonly string[];
     } & MapsOutcome)
   | ({
       readonly type: 'MAPS_IMPORT_RESULT';

@@ -14,7 +14,7 @@ import type { CollectionRef } from '@/src/domain/models/extracted-shop';
 import type { StoredError, StoredShop } from '@/src/domain/models/session';
 import { errorMessageFor } from '@/src/domain/errors/error-messages';
 import { KmlBuilder } from '@/src/domain/kml/kml-builder';
-import { hasCreatedNewMap } from '@/src/domain/my-maps/my-maps-detectors';
+import { hasCreatedNewMap, isPickerFrameReady } from '@/src/domain/my-maps/my-maps-detectors';
 import { TABELOG_ORIGINS } from '@/src/infrastructure/permissions/tabelog-origins';
 import { MY_MAPS_ORIGINS } from '@/src/infrastructure/permissions/my-maps-origins';
 
@@ -22,7 +22,13 @@ const TABELOG_CONTENT_SCRIPT = '/content-scripts/tabelog.js';
 const MYMAPS_CONTENT_SCRIPT = '/content-scripts/mymaps.js';
 const TAB_NAVIGATION_TIMEOUT_MS = 15_000;
 const MAP_CREATION_TIMEOUT_MS = 15_000;
-const PICKER_FRAME_TIMEOUT_MS = 15_000;
+// Overall budget for discovering the picker frame AND getting a reply to MAPS_FEED_KML, covering
+// rediscovery retries (see sendFeedKmlWithRetry) — a frame can report ready content
+// (isPickerFrameReady) and still have its execution context torn down before the message lands,
+// e.g. the picker v2 app finishes its progressive render into a document beyond the one just
+// discovered (hypothesis 0.2, spike results §3 third addendum). Kept larger than the old
+// single-shot picker-frame timeout (15s) so there's real room for at least one rediscovery-and-resend.
+const FEED_KML_RETRY_TIMEOUT_MS = 20_000;
 const NAVIGATION_POLL_INTERVAL_MS = 300;
 const MY_MAPS_HOME_URL = 'https://www.google.com/maps/d/u/0/';
 // Chrome always assigns frameId 0 to a tab's top-level document.
@@ -294,16 +300,30 @@ export default defineBackground(() => {
     return browser.tabs.sendMessage(tabId, message, { frameId });
   }
 
+  // Compact, diagnostics-rule-safe (role strings + booleans only) summary of one injection result
+  // for the tick log below — never the raw `result` value itself.
+  function describeFrameResult(value: unknown): string {
+    if (typeof value === 'object' && value !== null && 'role' in value && 'hasPickerContent' in value) {
+      const { role, hasPickerContent } = value as { role: unknown; hasPickerContent: unknown };
+      return `${String(role)}:${String(hasPickerContent)}`;
+    }
+    return String(value);
+  }
+
   // The KML upload picker (docs.google.com/picker) is a cross-origin IFRAME that doesn't exist
   // in the DOM until after MAPS_OPEN_IMPORT_DIALOG's click, and loads asynchronously after that.
   // There's no permission-free way to be notified the instant it appears (that would need
   // `webNavigation`), so instead we re-inject with `allFrames: true` and check each injection
-  // result's `result` field for the 'picker' role that mymaps.content.ts's `main()` returns
-  // (see detectMapsFrameRole) until it shows up or we time out. Frames the extension lacks host
-  // permission for are silently skipped by `executeScript`, so unrelated iframes on the page
-  // never show up here. Re-injecting also re-executes the script in the top frame every poll
-  // tick; mymaps.content.ts guards against re-registering its onMessage listener more than once
-  // per document, so this doesn't pile up duplicate listeners there.
+  // result's `result` field — `{ role, hasPickerContent }`, as returned by mymaps.content.ts's
+  // `main()` — until a frame is both role 'picker' AND has actually rendered picker content
+  // (`isPickerFrameReady`), or we time out. Hostname alone used to be treated as sufficient (bare
+  // `result === 'picker'`); that could latch onto a still-loading `docs.google.com` frame, or
+  // (defensively) a nested `docs.google.com` frame inside the picker gadget that never renders the
+  // nav/file input at all — see hypothesis 0.1, spike results §3 third addendum. Frames the
+  // extension lacks host permission for are silently skipped by `executeScript`, so unrelated
+  // iframes on the page never show up here. Re-injecting also re-executes the script in the top
+  // frame every poll tick; mymaps.content.ts guards against re-registering its onMessage listener
+  // more than once per document, so this doesn't pile up duplicate listeners there.
   async function waitForPickerFrame(tabId: number, timeoutMs: number, jobId: JobId): Promise<number | undefined> {
     const deadline = Date.now() + timeoutMs;
     for (;;) {
@@ -311,15 +331,15 @@ export default defineBackground(() => {
         target: { tabId, allFrames: true },
         files: [MYMAPS_CONTENT_SCRIPT],
       });
-      // One compact line per tick: frame count plus each frame's reported role, so a stall here
-      // can be told apart as "picker frame never injected into" (few/no frames) vs. "found but
-      // no picker role reported" (frames present, no 'picker' among the roles).
+      // One compact line per tick: frame count plus each frame's reported role:hasPickerContent,
+      // so a stall here can be told apart as "picker frame never injected into" (few/no frames) vs.
+      // "found but not ready yet" (a 'picker' role present but hasPickerContent still false).
       logStep(
         jobId,
         'waitForPickerFrame:tick',
-        `frames=${results.length} roles=${results.map((result) => String(result.result)).join(',')}`,
+        `frames=${results.length} roles=${results.map((result) => describeFrameResult(result.result)).join(',')}`,
       );
-      const pickerFrame = results.find((result) => result.result === 'picker');
+      const pickerFrame = results.find((result) => isPickerFrameReady(result.result));
       if (pickerFrame) {
         return pickerFrame.frameId;
       }
@@ -327,6 +347,51 @@ export default defineBackground(() => {
         return undefined;
       }
       await new Promise((resolve) => setTimeout(resolve, NAVIGATION_POLL_INTERVAL_MS));
+    }
+  }
+
+  // Wraps picker-frame discovery + MAPS_FEED_KML delivery in a loop bounded by
+  // FEED_KML_RETRY_TIMEOUT_MS: the frame `waitForPickerFrame` finds can still have its execution
+  // context torn down before the message lands (hypothesis 0.2) — `sendToMapsTab` then rejects or
+  // resolves `undefined`, which (unlike an explicit `{ok:false,code}` from a still-alive content
+  // script) is indistinguishable from "nothing ever ran there". On that signal, rediscover
+  // (re-inject) and resend rather than fail outright. Any actual reply — success or an explicit
+  // content-script-observed failure — is returned immediately; it is never retried past.
+  async function sendFeedKmlWithRetry(
+    tabId: number,
+    jobId: JobId,
+    kml: string,
+    fileName: string,
+  ): Promise<MapsToWorkerMessage | undefined> {
+    const deadline = Date.now() + FEED_KML_RETRY_TIMEOUT_MS;
+    for (;;) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) {
+        return undefined;
+      }
+      logStep(jobId, 'waitForPickerFrame:start');
+      const pickerFrameId = await waitForPickerFrame(tabId, remaining, jobId);
+      if (pickerFrameId === undefined) {
+        logStep(jobId, 'waitForPickerFrame:timeout');
+        return undefined;
+      }
+      logStep(jobId, 'waitForPickerFrame:ok', `frameId=${pickerFrameId}`);
+
+      logStep(jobId, 'MAPS_FEED_KML:send', `frameId=${pickerFrameId}`);
+      let feedResult: MapsToWorkerMessage | undefined;
+      try {
+        feedResult = await sendToMapsTab(
+          tabId,
+          { type: 'MAPS_FEED_KML', protocolVersion: 1, jobId, kml, fileName },
+          pickerFrameId,
+        );
+      } catch {
+        feedResult = undefined;
+      }
+      if (feedResult) {
+        return feedResult;
+      }
+      logStep(jobId, 'MAPS_FEED_KML:noReply', `frameId=${pickerFrameId}`);
     }
   }
 
@@ -423,25 +488,23 @@ export default defineBackground(() => {
       }
       logStep(jobId, 'MAPS_OPEN_IMPORT_DIALOG:ok');
 
-      logStep(jobId, 'waitForPickerFrame:start');
-      const pickerFrameId = await waitForPickerFrame(tabId, PICKER_FRAME_TIMEOUT_MS, jobId);
-      if (pickerFrameId === undefined) {
-        logStep(jobId, 'waitForPickerFrame:timeout');
+      const kml = new KmlBuilder().build(mapName, session.extractResult.shops);
+      const fileName = `${mapName.replace(/[/\\]/g, '_')}.kml`;
+      const feedResult = await sendFeedKmlWithRetry(tabId, jobId, kml, fileName);
+      // Re-log the picker frame's own step trace here — its console.log only ever reached the
+      // (invisible-to-the-user) picker frame's own console; see mymaps.content.ts's logStep
+      // comment and hypothesis 4 / spike results §3 third addendum.
+      if (feedResult?.type === 'MAPS_FEED_KML_RESULT' && feedResult.diagnostics) {
+        for (const line of feedResult.diagnostics) {
+          console.log(line);
+        }
+      }
+      if (!feedResult) {
         await failImport(jobId, 'MyMapsUiChanged');
         return;
       }
-      logStep(jobId, 'waitForPickerFrame:ok', `frameId=${pickerFrameId}`);
-
-      const kml = new KmlBuilder().build(mapName, session.extractResult.shops);
-      const fileName = `${mapName.replace(/[/\\]/g, '_')}.kml`;
-      logStep(jobId, 'MAPS_FEED_KML:send');
-      const feedResult = await sendToMapsTab(
-        tabId,
-        { type: 'MAPS_FEED_KML', protocolVersion: 1, jobId, kml, fileName },
-        pickerFrameId,
-      );
-      if (!feedResult || feedResult.type !== 'MAPS_FEED_KML_RESULT' || !feedResult.ok) {
-        await failImport(jobId, feedResult?.type === 'MAPS_FEED_KML_RESULT' ? feedResult.code : 'InternalError');
+      if (feedResult.type !== 'MAPS_FEED_KML_RESULT' || !feedResult.ok) {
+        await failImport(jobId, feedResult.type === 'MAPS_FEED_KML_RESULT' ? feedResult.code : 'InternalError');
         return;
       }
       logStep(jobId, 'MAPS_FEED_KML:ok');

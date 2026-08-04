@@ -130,6 +130,18 @@ describe('isMapsToWorkerMessage', () => {
     ).toBe(true);
   });
 
+  it('accepts MAPS_FEED_KML_RESULT ok:true with an optional diagnostics array', () => {
+    expect(
+      isMapsToWorkerMessage({
+        type: 'MAPS_FEED_KML_RESULT',
+        protocolVersion: 1,
+        jobId: 'job-1',
+        ok: true,
+        diagnostics: ['[import2gmap] job=job-1 step=feedKml:layout branch=upload_nav_already_selected'],
+      }),
+    ).toBe(true);
+  });
+
   it('rejects MAPS_FEED_KML_RESULT ok:false without a code', () => {
     expect(
       isMapsToWorkerMessage({ type: 'MAPS_FEED_KML_RESULT', protocolVersion: 1, jobId: 'job-1', ok: false }),

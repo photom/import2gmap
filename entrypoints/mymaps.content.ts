@@ -3,10 +3,14 @@ import {
   detectMapsFrameRole,
   hasImportSucceeded,
   hasMapTitleApplied,
+  hasPickerFrameContent,
   isLoggedOutRedirect,
+  isPickerSpinnerActive,
   isPickerUploadNavLabel,
   isPickerUploadNavSelected,
+  pickerActivationKeyEventInit,
 } from '@/src/domain/my-maps/my-maps-detectors';
+import type { MapsFrameDetectionResult } from '@/src/domain/my-maps/my-maps-detectors';
 import { isWorkerToMapsMessage } from '@/src/domain/messaging/message-types';
 import type { JobId, MapsOutcome, MapsToWorkerMessage } from '@/src/domain/messaging/message-types';
 
@@ -33,6 +37,12 @@ const FILE_INPUT_FALLBACK_SELECTOR = 'input[type="file"]';
 // sole anchor (it's undocumented and could churn); the real identifier is the option's own text.
 const PICKER_NAV_OPTION_HINT_SELECTOR = 'div[role="option"][jsname="Co88hf"]';
 const PICKER_NAV_OPTION_SELECTOR = 'div[role="option"]';
+// The picker v2 app's own loading spinner — observed present while the app is still settling and
+// carrying `data-active="false"` and/or `aria-hidden="true"` once it's done (see
+// isPickerSpinnerActive, hypothesis 0.4). Like PICKER_NAV_OPTION_HINT_SELECTOR's jsname, this is an
+// optional, unconfirmed narrowing anchor, not the sole gate — its absence is treated as "not
+// spinning" (nothing to wait on), never as a failure.
+const PICKER_SPINNER_SELECTOR = 'div[jsname="aZ2wEe"]';
 const LAYER_TITLE_SELECTOR = '#ly0-layer-header .pbTTYe-r4nke';
 const DEFAULT_LAYER_TITLE = '無題のレイヤ';
 const PREPARE_TIMEOUT_MS = 15_000;
@@ -45,6 +55,13 @@ const POLL_INTERVAL_MS = 300;
 // strategies doesn't itself take unreasonably long; a real activation should take effect almost
 // immediately if it's going to at all.
 const ACTIVATION_STEP_TIMEOUT_MS = 1_000;
+// Overall budget for cycling through every ACTIVATION_STRATEGIES entry, possibly more than once
+// (see activateUploadPaneNav below) — generous enough for a couple of full passes, in case
+// jsaction's event dispatcher for the listbox isn't wired up yet the instant the nav option first
+// appears (a late-installed dispatcher silently drops early synthetic events; hypothesis 0.3,
+// spike results §3 third addendum). A single one-shot pass through all four strategies could land
+// entirely inside that dead window and give up permanently.
+const ACTIVATION_OVERALL_TIMEOUT_MS = 10_000;
 
 // The worker discovers the picker iframe's frameId by repeatedly re-injecting this script with
 // `allFrames: true` (see `waitForPickerFrame` in entrypoints/background.ts) until an injection
@@ -55,14 +72,29 @@ const ACTIVATION_STEP_TIMEOUT_MS = 1_000;
 // avoid piling up duplicate `runtime.onMessage` listeners.
 const REGISTERED_FLAG = '__import2gmapMymapsRegistered';
 
-// Diagnostic-only: mirrors entrypoints/background.ts's logStep so the picker-frame path (the one
-// step this flow currently cannot see into at all) shows up under the same greppable prefix in
-// the service-worker console. Never pass page HTML, shop data, URLs, or map names here — only
-// step names, jobId, selector-found booleans, and aria-selected/role strings (see
-// docs/reference/extension-error-codes.md §1's "Logging" rule).
+// Diagnostic-only: uses the same greppable prefix as entrypoints/background.ts's own logStep, BUT
+// a content script's console.log only ever reaches the console of the *frame it runs in* — for the
+// picker frame, that's the invisible-to-the-user docs.google.com iframe's own console, never the
+// service-worker console. (A prior version of this comment claimed otherwise; that was wrong and
+// is exactly why a field report of "map created, dialog opened, but no console output" was
+// initially undiagnosable — see spike results §3 third addendum, 2026-08-05.) Every line is also
+// buffered per-jobId and attached to MAPS_FEED_KML_RESULT's `diagnostics` field so
+// entrypoints/background.ts can re-log it where it's actually visible. Never pass page HTML, shop
+// data, URLs, or map names here — only step names, jobId, selector-found booleans, and
+// aria-selected/role strings (see docs/reference/extension-error-codes.md §1's "Logging" rule).
 const LOG_PREFIX = '[import2gmap]';
+const diagnosticsByJob = new Map<JobId, string[]>();
 function logStep(jobId: JobId, step: string, detail?: string): void {
-  console.log(`${LOG_PREFIX} job=${jobId} step=${step}${detail !== undefined ? ` ${detail}` : ''}`);
+  const line = `${LOG_PREFIX} job=${jobId} step=${step}${detail !== undefined ? ` ${detail}` : ''}`;
+  console.log(line);
+  const buffered = diagnosticsByJob.get(jobId) ?? [];
+  buffered.push(line);
+  diagnosticsByJob.set(jobId, buffered);
+}
+function takeDiagnostics(jobId: JobId): string[] {
+  const buffered = diagnosticsByJob.get(jobId) ?? [];
+  diagnosticsByJob.delete(jobId);
+  return buffered;
 }
 
 function isAlreadyRegisteredInThisDocument(): boolean {
@@ -220,6 +252,15 @@ function findPickerUploadNavOption(): HTMLElement | null {
   return null;
 }
 
+// Picker frame only. See PICKER_SPINNER_SELECTOR / isPickerSpinnerActive (hypothesis 0.4): a
+// spinner element not existing at all means there's nothing to wait on (layout 1's pane, or a
+// picker document that never uses this spinner), not that the app is stuck loading.
+function isPickerAppLoading(): boolean {
+  const spinner = document.querySelector(PICKER_SPINNER_SELECTOR);
+  if (!spinner) return false;
+  return isPickerSpinnerActive(spinner.getAttribute('data-active'), spinner.getAttribute('aria-hidden'));
+}
+
 function findKmlFileInputStrict(): HTMLInputElement | null {
   return document.querySelector<HTMLInputElement>(FILE_INPUT_SELECTOR);
 }
@@ -247,55 +288,104 @@ function isUploadNavSelected(option: HTMLElement | null): boolean {
 // jsaction handlers can replace the DOM node) and, if it worked, should flip `aria-selected` to
 // `"true"`. Ordered from least to most intrusive:
 //   1. A plain `.click()` — works if the option has its own click handler.
-//   2. A bubbling pointer/mouse sequence — the listbox's `jsaction="click:cOuCgd"` is delegated on
-//      the *container*, not the option, and delegation needs real bubbling events, which a bare
-//      `HTMLElement.click()` may not synthesize convincingly enough for jsaction to react to.
+//   2. A realistic pointer/mouse sequence (below) — the listbox's `jsaction="click:cOuCgd"` is
+//      delegated on the *container*, not the option, and delegation needs real, fully-specified
+//      bubbling events, which a bare `HTMLElement.click()` may not synthesize convincingly enough
+//      for jsaction to react to.
 //   3/4. Keyboard activation (`Enter`, then `' '`/Space) — the listbox also has
 //      `jsaction="keydown:I481le"`, a genuinely different activation path from click, worth trying
-//      on its own rather than assuming it's covered by the click attempts above.
+//      on its own rather than assuming it's covered by the click attempts above. Uses
+//      `pickerActivationKeyEventInit` so `keyCode`/`which` are set — a bare `new KeyboardEvent`
+//      leaves them at `0`, which Closure/jsaction keydown handlers commonly branch on (see spike
+//      results §3 third addendum, the live evidence that prompted this fix).
+//
+// Strategy 2's pointer/mouse sequence: hover first (a real cursor arrives before it presses), then
+// a full press/release, each event carrying `view`/`detail`/`button`/`buttons` and the
+// pointer-specific fields (not just `bubbles: true`) — see hypothesis 2, spike results §3 third
+// addendum. Dispatched from the option's innermost real child (the icon/text span), mirroring
+// where a user's cursor would actually land, rather than the `role="option"` div itself; the
+// listbox's delegated `jsaction="click:cOuCgd"` still sees it via bubbling either way.
+const POINTER_SEQUENCE: ReadonlyArray<{ readonly type: string; readonly pressed: boolean }> = [
+  { type: 'pointerover', pressed: false },
+  { type: 'mouseover', pressed: false },
+  { type: 'mousemove', pressed: false },
+  { type: 'pointerdown', pressed: true },
+  { type: 'mousedown', pressed: true },
+  { type: 'pointerup', pressed: false },
+  { type: 'mouseup', pressed: false },
+  { type: 'click', pressed: false },
+];
+
+function dispatchPointerSequence(target: HTMLElement): void {
+  for (const { type, pressed } of POINTER_SEQUENCE) {
+    const isPointerType = type.startsWith('pointer');
+    const isHover = type === 'pointerover' || type === 'mouseover' || type === 'mousemove';
+    const init: PointerEventInit & MouseEventInit = {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      view: window,
+      detail: isHover ? 0 : 1,
+      button: 0,
+      buttons: pressed ? 1 : 0,
+      ...(isPointerType ? { pointerId: 1, pointerType: 'mouse', isPrimary: true } : {}),
+    };
+    const EventCtor = isPointerType ? PointerEvent : MouseEvent;
+    target.dispatchEvent(new EventCtor(type, init));
+  }
+}
+
 const ACTIVATION_STRATEGIES: ReadonlyArray<(option: HTMLElement) => void> = [
   (option) => option.click(),
+  (option) => dispatchPointerSequence(option.querySelector<HTMLElement>('span, svg') ?? option),
   (option) => {
-    for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
-      const EventCtor = type.startsWith('pointer') ? PointerEvent : MouseEvent;
-      option.dispatchEvent(new EventCtor(type, { bubbles: true }));
-    }
+    option.focus();
+    option.dispatchEvent(new KeyboardEvent('keydown', pickerActivationKeyEventInit('Enter')));
   },
   (option) => {
     option.focus();
-    option.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-  },
-  (option) => {
-    option.focus();
-    option.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+    option.dispatchEvent(new KeyboardEvent('keydown', pickerActivationKeyEventInit(' ')));
   },
 ];
 
 // Picker frame only. Escalates through ACTIVATION_STRATEGIES in order, each followed by a bounded
 // re-check, until the upload nav option's `aria-selected` flips to `"true"` or the file input
-// appears (whichever this frame's layout actually renders). Returns false only once every strategy
-// has been tried and neither happened — the caller must treat that as an explicit MyMapsUiChanged,
-// never a silent continue (ADR-0003). See spike results §3 (2026-08-04 second addendum).
+// appears (whichever this frame's layout actually renders). Cycles through the full strategy list
+// repeatedly until ACTIVATION_OVERALL_TIMEOUT_MS elapses, rather than a single one-shot pass —
+// jsaction's event dispatcher for the listbox may not be installed yet the instant the nav option
+// first appears, and a synthetic event dispatched before then can be silently dropped (hypothesis
+// 0.3, spike results §3 third addendum); a later cycle gives it another chance once wiring has
+// caught up. Returns false only once the deadline passes with nothing having worked — the caller
+// must treat that as an explicit MyMapsUiChanged, never a silent continue (ADR-0003).
 async function activateUploadPaneNav(jobId: JobId): Promise<boolean> {
-  for (const [index, applyStrategy] of ACTIVATION_STRATEGIES.entries()) {
-    const option = findPickerUploadNavOption();
-    if (!option) return false;
-    if (isUploadNavSelected(option)) return true;
+  const deadline = Date.now() + ACTIVATION_OVERALL_TIMEOUT_MS;
+  let cycle = 0;
+  do {
+    for (const [index, applyStrategy] of ACTIVATION_STRATEGIES.entries()) {
+      const option = findPickerUploadNavOption();
+      if (!option) return false;
+      if (isUploadNavSelected(option)) return true;
 
-    logStep(jobId, 'feedKml:activateNav:before', `strategy=${index} ariaSelected=${option.getAttribute('aria-selected')}`);
-    applyStrategy(option);
+      logStep(
+        jobId,
+        'feedKml:activateNav:before',
+        `cycle=${cycle} strategy=${index} ariaSelected=${option.getAttribute('aria-selected')}`,
+      );
+      applyStrategy(option);
 
-    const activated = await pollUntil(
-      () => isUploadNavSelected(findPickerUploadNavOption()) || findKmlFileInputStrict() !== null,
-      ACTIVATION_STEP_TIMEOUT_MS,
-    );
-    logStep(
-      jobId,
-      'feedKml:activateNav:after',
-      `strategy=${index} ariaSelected=${findPickerUploadNavOption()?.getAttribute('aria-selected') ?? 'n/a'}`,
-    );
-    if (activated) return true;
-  }
+      const activated = await pollUntil(
+        () => isUploadNavSelected(findPickerUploadNavOption()) || findKmlFileInputStrict() !== null,
+        ACTIVATION_STEP_TIMEOUT_MS,
+      );
+      logStep(
+        jobId,
+        'feedKml:activateNav:after',
+        `cycle=${cycle} strategy=${index} ariaSelected=${findPickerUploadNavOption()?.getAttribute('aria-selected') ?? 'n/a'}`,
+      );
+      if (activated) return true;
+    }
+    cycle += 1;
+  } while (Date.now() < deadline);
   return false;
 }
 
@@ -313,14 +403,24 @@ async function activateUploadPaneNav(jobId: JobId): Promise<boolean> {
 // not work in the field (the nav stayed `aria-selected="false"`, Drive pane still rendered; see
 // spike results §3, 2026-08-04 second addendum), because the Drive-browsing pane can itself contain
 // a stray file input (drag-and-drop upload support) that the old bare fallback selector could match.
+// Bundles the outcome with this job's buffered logStep lines (see LOG_PREFIX/takeDiagnostics above)
+// so entrypoints/background.ts can re-log the picker-frame trace where it's actually visible.
+function feedKmlResult(jobId: JobId, outcome: MapsOutcome): MapsToWorkerMessage {
+  return { type: 'MAPS_FEED_KML_RESULT', protocolVersion: 1, jobId, diagnostics: takeDiagnostics(jobId), ...outcome };
+}
+
 async function handleFeedKml(jobId: JobId, kml: string, fileName: string): Promise<MapsToWorkerMessage> {
+  // Also requires the picker's own loading spinner to not be active (hypothesis 0.4): the app can
+  // render the nav option before it's finished settling, and acting the instant `querySelector`
+  // finds something risks hitting jsaction handlers that aren't wired up yet (see
+  // activateUploadPaneNav's cycling fix for the same underlying race).
   const navOrStrictInputReady = await pollUntil(
-    () => findPickerUploadNavOption() !== null || findKmlFileInputStrict() !== null,
+    () => (findPickerUploadNavOption() !== null || findKmlFileInputStrict() !== null) && !isPickerAppLoading(),
     PREPARE_TIMEOUT_MS,
   );
   if (!navOrStrictInputReady) {
     logStep(jobId, 'feedKml:layout', 'branch=neither_found');
-    return { type: 'MAPS_FEED_KML_RESULT', protocolVersion: 1, jobId, ok: false, code: 'MyMapsUiChanged' };
+    return feedKmlResult(jobId, { ok: false, code: 'MyMapsUiChanged' });
   }
 
   // If the nav exists but isn't confirmed selected yet, activate it — regardless of whether a file
@@ -336,7 +436,7 @@ async function handleFeedKml(jobId: JobId, kml: string, fileName: string): Promi
   if (navNeedsActivation) {
     const activated = await activateUploadPaneNav(jobId);
     if (!activated) {
-      return { type: 'MAPS_FEED_KML_RESULT', protocolVersion: 1, jobId, ok: false, code: 'MyMapsUiChanged' };
+      return feedKmlResult(jobId, { ok: false, code: 'MyMapsUiChanged' });
     }
   }
 
@@ -346,7 +446,7 @@ async function handleFeedKml(jobId: JobId, kml: string, fileName: string): Promi
   const fileInput = await waitForKmlFileInput(PREPARE_TIMEOUT_MS);
   logStep(jobId, 'feedKml:fileInput', `found=${fileInput !== null}`);
   if (!fileInput) {
-    return { type: 'MAPS_FEED_KML_RESULT', protocolVersion: 1, jobId, ok: false, code: 'MyMapsUiChanged' };
+    return feedKmlResult(jobId, { ok: false, code: 'MyMapsUiChanged' });
   }
 
   const dataTransfer = new DataTransfer();
@@ -354,7 +454,7 @@ async function handleFeedKml(jobId: JobId, kml: string, fileName: string): Promi
   fileInput.files = dataTransfer.files;
   fileInput.dispatchEvent(new Event('change', { bubbles: true }));
 
-  return { type: 'MAPS_FEED_KML_RESULT', protocolVersion: 1, jobId, ok: true };
+  return feedKmlResult(jobId, { ok: true });
 }
 
 // Top frame only. The success signal (layer title changing away from its default) renders back
@@ -413,11 +513,18 @@ function registerPickerFrameListener(): void {
 
 export default defineContentScript({
   registration: 'runtime',
-  main() {
-    // Returned so the worker can learn this frame's role (and frameId) from the
+  main(): MapsFrameDetectionResult {
+    // Returned so the worker can learn this frame's role, frameId, and (for a picker-hostname
+    // frame) whether it has actually rendered picker UI yet, from the
     // `browser.scripting.executeScript` injection result — see `waitForPickerFrame` in
     // entrypoints/background.ts. WXT surfaces a content script's `main()` return value there.
+    // `hasPickerContent` (hypothesis 0.1, spike results §3 third addendum) is what makes frame
+    // selection content-aware instead of hostname-only: the instant a `docs.google.com` frame
+    // exists it may still be blank/loading, or — if Google ever nests one — a frame that will never
+    // render the nav/file input at all.
     const role = detectMapsFrameRole(window.location.hostname);
+    const hasPickerContent =
+      role === 'picker' && hasPickerFrameContent(findPickerUploadNavOption() !== null, findKmlFileInputStrict() !== null);
 
     if (!isAlreadyRegisteredInThisDocument()) {
       markRegisteredInThisDocument();
@@ -428,6 +535,6 @@ export default defineContentScript({
       }
     }
 
-    return role;
+    return { role, hasPickerContent };
   },
 });
