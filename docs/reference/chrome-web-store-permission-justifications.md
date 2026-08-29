@@ -1,10 +1,8 @@
 # Chrome Web Store submission: permission justifications
 
-**Superseded 2026-08-29 — needs a rewrite before use.** The manifest/permissions and justification text below assume the My Maps import path, now superseded by [ADR-0008](../explanation/adr/0008-google-maps-saved-list-import.md) (Google Maps native saved-list import; no `docs.google.com/picker*`, different Google Maps justification text). Chrome Web Store submission is deferred anyway per the decision checklist, but do not submit against this version once implementation starts on the new import path.
-
 Text to paste into the Chrome Web Store Developer Dashboard under
 **Privacy practices → Permission justification**. Each field has a 1,000-character limit;
-every entry below is within it.
+every entry below is within it. Reflects the [ADR-0008](../explanation/adr/0008-google-maps-saved-list-import.md) Google Maps native saved-list import path (no My Maps, no `docs.google.com/picker*`).
 
 Manifest for the submitted version (`output/chrome-mv3/manifest.json`):
 
@@ -13,8 +11,7 @@ Manifest for the submitted version (`output/chrome-mv3/manifest.json`):
 "optional_host_permissions": [
   "https://tabelog.com/*",
   "https://www.tabelog.com/*",
-  "https://www.google.com/maps/*",
-  "https://docs.google.com/picker*"
+  "https://www.google.com/maps/*"
 ],
 "content_scripts": []
 ```
@@ -31,9 +28,9 @@ This extension stores one session-scoped record so its three execution contexts 
 popup, the MV3 service worker, and the injected content scripts — can share state.
 
 It uses chrome.storage.session only (never local or sync), under a single key. The record
-holds the current step of the multi-step UI, the user-entered map name, and the extracted
-restaurant list (name, address, and public tabelog.com URL of restaurants the user
-themselves saved), so it survives between the extract step and the later import step.
+holds the current step of the multi-step UI and the extracted restaurant list (name,
+address, and public tabelog.com URL of restaurants the user themselves saved), so it
+survives between the extract step and the later import step.
 
 In-memory state is not sufficient: an MV3 service worker is terminated between events, and
 Chrome's own optional-permission dialog takes focus and destroys the popup's execution
@@ -72,8 +69,8 @@ Two injections are required:
 public restaurant URL) from the page the user is already viewing, and to follow the list's
 pagination.
 
-2. Into the Google My Maps tab that the extension opens, to create a new map and hand the
-generated KML file to the standard My Maps import dialog on the user's behalf.
+2. Into the Google Maps tab that the extension opens, to check whether a saved list named
+食べログ already exists and create it if it doesn't, using Google Maps' own saved-list UI.
 
 Re-injection is necessary after every page navigation, because a programmatically injected
 script's execution context is destroyed when its document navigates.
@@ -112,19 +109,15 @@ already viewing in their own account, and follows that list's pagination to cove
 page. It does not read account details or the user's private memos.
 
 https://www.google.com/maps/*
-Requested when the user asks to import. The extension opens Google My Maps, creates a new
-map, names it as the user specified, and opens the standard KML import dialog.
-
-https://docs.google.com/picker*
-The My Maps KML import dialog is a cross-origin docs.google.com/picker iframe, and handing
-the generated file to it requires host access to that frame. The pattern is narrowed to the
-/picker path rather than the whole docs.google.com origin.
+Requested when the user asks to import. The extension opens Google Maps and, using its
+native saved-list UI, checks whether a saved list named 食べログ already exists and
+creates it if not.
 ```
 
 ## Single purpose
 
 ```text
-Import the restaurants a user has saved on tabelog.com into a new Google My Maps map.
+Import the restaurants a user has saved on tabelog.com into a Google Maps saved list.
 ```
 
 ---
@@ -160,5 +153,5 @@ All three certifications apply:
 - Data is not being used or transferred to determine creditworthiness or for lending purposes
 
 Declaring "Website content" as collected does not contradict the policy: that data stays on
-the device, and reaches the user's own Google My Maps only through an explicit user action.
-`PRIVACY.md` §5 states this.
+the device, and reaches the user's own Google Maps saved list only through an explicit user
+action. `PRIVACY.md` §5 states this.

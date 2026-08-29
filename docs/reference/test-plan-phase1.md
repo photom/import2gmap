@@ -38,7 +38,11 @@ Related: [ADR-0004](../explanation/adr/0004-extension-implementation-baseline.md
 
 ---
 
-## Module 2: KML Generator (`KmlBuilder`)
+## Module 2: KML Generator (`KmlBuilder`) — deleted 2026-08-29, historical only
+
+`KmlBuilder` and its tests were removed along with the rest of the My Maps import path — see
+[ADR-0008](../explanation/adr/0008-google-maps-saved-list-import.md), which replaces it with
+Google Maps native saved-list import (no KML). Kept below for the historical record.
 
 - [ ] **2.1 Document Root & Metadata**
   - [ ] Generates valid UTF-8 OGC KML 2.2 document header with XML-escaped map title (`<name>`).

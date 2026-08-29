@@ -28,9 +28,8 @@ function isValidExtractResult(value: unknown): value is StoredExtractResult {
 
 function isValidPendingPermission(value: unknown): value is PendingPermission {
   if (!isRecord(value)) return false;
-  const { step, mapName, requestedAt } = value;
+  const { step, requestedAt } = value;
   if (step !== 'extract' && step !== 'import') return false;
-  if (mapName !== undefined && typeof mapName !== 'string') return false;
   if (typeof requestedAt !== 'number') return false;
   return true;
 }
@@ -43,9 +42,6 @@ export function validateSessionRoot(raw: unknown): SessionRoot {
     throw new ExtractionError('SessionCorrupt');
   }
   if (!VALID_UI_STEPS.includes(raw.uiStep as UiStep)) {
-    throw new ExtractionError('SessionCorrupt');
-  }
-  if (typeof raw.mapName !== 'string') {
     throw new ExtractionError('SessionCorrupt');
   }
   if (raw.extractResult !== undefined && !isValidExtractResult(raw.extractResult)) {

@@ -4,8 +4,6 @@ Stable error `code` values for popup display, messaging, and tests. Japanese `me
 
 Related: [extraction spec](tabelog-pc-saved-list-extraction-spec.md), [UI spec](extension-ui-specifications.md), [messaging](extension-messaging-protocol.md).
 
-**2026-08-29: Section 5's `MyMaps*` codes are superseded by [ADR-0008](../explanation/adr/0008-google-maps-saved-list-import.md)** (Google Maps native saved-list import replaces My Maps). Sections 1–4 (context/permissions, extraction, session/internal) remain in effect; Section 5 will get a successor code set (list-exists/create, duplicate-check, search/resolve, add-to-list) once the ADR-0008 spike lands.
-
 ---
 
 ## 1. Conventions
@@ -64,21 +62,21 @@ Related: [extraction spec](tabelog-pc-saved-list-extraction-spec.md), [UI spec](
 | `SessionCorrupt` | 保存中のデータが壊れていました。もう一度抽出してください。 | `extract` | Session guard failed |
 | `SessionQuotaExceeded` | 保存容量を超えたため抽出結果を保持できません。 | `extract` | Quota |
 | `NoExtractResult` | インポートできる抽出結果がありません。先に抽出してください。 | `extract` | Import without success payload |
-| `InvalidMapName` | マップ名を入力してください。 | `none` | Empty/invalid map name on import |
 | `InternalError` | 予期しないエラーが発生しました。 | `extract` | Catch-all |
 
 ---
 
-## 5. Import prelude (pre–Maps automation)
+## 5. Google Maps saved-list import (ADR-0008)
 
 | Code | Japanese message (default) | retryStep | When |
 | :--- | :--- | :--- | :--- |
-| `MyMapsTabOpenFailed` | Googleマイマップのタブを開けませんでした。 | `import` | `tabs.create` / focus failed |
-| `MyMapsNotReady` | マイマップページの準備を確認できませんでした。ログイン状態を確認して再試行してください。 | `import` | Prelude prepare failed |
-| `MyMapsUiChanged` | マイマップの画面構成が想定と異なります。 | `import` | Unexpected DOM (also used after spike) |
+| `GoogleMapsTabOpenFailed` | Googleマップのタブを開けませんでした。 | `import` | `tabs.create` failed |
+| `GoogleMapsNotReady` | Googleマップの準備を確認できませんでした。ログイン状態を確認して再試行してください。 | `import` | Reserved for a future logged-out detection; not currently distinguished from `GoogleMapsUiChanged` — see [spike notes](../explanation/google-maps-saved-list-spike-notes.md) open follow-ups |
+| `GoogleMapsUiChanged` | Googleマップの画面構成が想定と異なります。 | `import` | Any missing selector or bounded-timeout during `GMAPS_ENSURE_LIST` (menu/pane/create-list/rename) |
 | `ImportCancelled` | インポートをキャンセルしました。 | `none` | User cancel in prelude |
 
-Full Maps automation codes may extend this table after the ADR-0004 spike.
+Covers only "ensure the `食べログ` list exists" (step 1 of ADR-0008). Codes for per-shop duplicate
+detection, address search, and add-to-list are not defined yet — those steps aren't implemented.
 
 ---
 

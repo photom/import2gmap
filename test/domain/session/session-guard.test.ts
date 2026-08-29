@@ -6,7 +6,6 @@ import { captureError } from '../../helpers/capture-error';
 const validRoot = {
   schemaVersion: 1,
   uiStep: 'ready',
-  mapName: '食べログ保存リスト 2026-07-31',
 };
 
 describe('validateSessionRoot', () => {
@@ -59,10 +58,10 @@ describe('validateSessionRoot', () => {
     expect(validateSessionRoot(root)).toEqual(root);
   });
 
-  it('accepts a valid pendingPermission for import with a mapName', () => {
+  it('accepts a valid pendingPermission for import', () => {
     const root = {
       ...validRoot,
-      pendingPermission: { step: 'import', mapName: 'マップ', requestedAt: 1 },
+      pendingPermission: { step: 'import', requestedAt: 1 },
     };
     expect(validateSessionRoot(root)).toEqual(root);
   });

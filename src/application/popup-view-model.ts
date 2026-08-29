@@ -5,9 +5,9 @@ export type ScreenViewModel =
   | { readonly screen: 'wrong_context'; readonly extractEnabled: false; readonly code: 'wrong_tab' | 'wrong_tabelog_page' }
   | { readonly screen: 'extracting'; readonly progress?: ExtractProgress }
   | { readonly screen: 'extract_complete'; readonly shopCount?: number; readonly collectionCount?: number }
-  | { readonly screen: 'confirm'; readonly shopCount?: number; readonly collectionCount?: number; readonly mapName?: string }
+  | { readonly screen: 'confirm'; readonly shopCount?: number; readonly collectionCount?: number }
   | { readonly screen: 'import_starting' }
-  | { readonly screen: 'import_succeeded'; readonly shopCount?: number; readonly mapName?: string }
+  | { readonly screen: 'import_succeeded' }
   | {
       readonly screen: 'error';
       readonly code: string;
@@ -38,12 +38,11 @@ export function buildScreenViewModel(snapshot: UiStateSnapshot): ScreenViewModel
         screen: 'confirm',
         shopCount: snapshot.shopCount,
         collectionCount: snapshot.collectionCount,
-        mapName: snapshot.mapName,
       };
     case 'import_starting':
       return { screen: 'import_starting' };
     case 'import_succeeded':
-      return { screen: 'import_succeeded', shopCount: snapshot.shopCount, mapName: snapshot.mapName };
+      return { screen: 'import_succeeded' };
     case 'error':
       return {
         screen: 'error',

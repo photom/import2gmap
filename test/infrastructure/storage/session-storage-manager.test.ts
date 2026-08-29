@@ -53,7 +53,6 @@ describe('SessionStorageManager', () => {
     await storage.setItem(SESSION_KEY, {
       schemaVersion: 1,
       uiStep: 'ready',
-      mapName: 'マイマップ',
     });
     const manager = new SessionStorageManager();
 
@@ -64,7 +63,6 @@ describe('SessionStorageManager', () => {
 
     const raw = await storage.getItem<Record<string, unknown>>(SESSION_KEY);
     expect(raw?.uiStep).toBe('extracting');
-    expect(raw?.mapName).toBe('マイマップ');
     expect(raw?.activeJob).toEqual({ jobId: 'job-1', kind: 'extract', startedAt: 1 });
   });
 
@@ -72,7 +70,6 @@ describe('SessionStorageManager', () => {
     await storage.setItem(SESSION_KEY, {
       schemaVersion: 1,
       uiStep: 'error',
-      mapName: 'マイマップ',
       lastError: { code: 'IncompleteCrawl', message: 'x', retryStep: 'extract', at: 1 },
     });
     const manager = new SessionStorageManager();
@@ -88,7 +85,6 @@ describe('SessionStorageManager', () => {
     await storage.setItem(SESSION_KEY, {
       schemaVersion: 1,
       uiStep: 'ready',
-      mapName: 'マイマップ',
     });
     const manager = new SessionStorageManager();
 
@@ -105,7 +101,6 @@ describe('SessionStorageManager', () => {
     await storage.setItem(SESSION_KEY, {
       schemaVersion: 1,
       uiStep: 'confirm',
-      mapName: 'マイマップ',
       activeJob: { jobId: 'job-1', kind: 'extract', startedAt: 0 },
       extractResult,
     });

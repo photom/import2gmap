@@ -6,7 +6,7 @@ import type { SessionRoot } from '../../src/domain/models/session';
 const deps = { newJobId: () => 'job-1', now: () => 1000 };
 
 function baseSession(overrides: Partial<SessionRoot> = {}): SessionRoot {
-  return { schemaVersion: 1, uiStep: 'ready', mapName: '食べログ保存リスト 2026-08-02', ...overrides };
+  return { schemaVersion: 1, uiStep: 'ready', ...overrides };
 }
 
 describe('route GET_UI_STATE', () => {
@@ -162,26 +162,9 @@ describe('route EXTRACT_DISCARD', () => {
   });
 });
 
-describe('route MAP_NAME_SET', () => {
-  it('updates mapName', () => {
-    const result = route(
-      baseSession(),
-      'ready',
-      { type: 'MAP_NAME_SET', protocolVersion: 1, mapName: '新しいマップ' },
-      deps,
-    );
-    expect(result.patch.mapName).toBe('新しいマップ');
-  });
-});
-
 describe('route IMPORT_START', () => {
   it('fails with NoExtractResult when there is no extract result', () => {
-    const result = route(
-      baseSession(),
-      'ready',
-      { type: 'IMPORT_START', protocolVersion: 1, mapName: 'マップ' },
-      deps,
-    );
+    const result = route(baseSession(), 'ready', { type: 'IMPORT_START', protocolVersion: 1 }, deps);
     expect(result.patch.uiStep).toBe('error');
     // message comes from the error catalog (see docs/reference/extension-error-codes.md via
     // errorMessageFor) — added 2026-08-04 as part of removing a hardcoded string here that had
@@ -193,7 +176,7 @@ describe('route IMPORT_START', () => {
     });
   });
 
-  it('fails with InvalidMapName when mapName is empty after trim', () => {
+  it('starts the ensure-saved-list job when an extract result exists', () => {
     const state = baseSession({
       extractResult: {
         jobId: 'job-1',
@@ -204,40 +187,10 @@ describe('route IMPORT_START', () => {
         collectionCount: 0,
       },
     });
-    const result = route(
-      state,
-      'ready',
-      { type: 'IMPORT_START', protocolVersion: 1, mapName: '   ' },
-      deps,
-    );
-    expect(result.patch.uiStep).toBe('error');
-    expect(result.patch.lastError).toMatchObject({
-      code: 'InvalidMapName',
-      message: errorMessageFor('InvalidMapName'),
-      retryStep: 'none',
-    });
-  });
-
-  it('starts the import job when extractResult and mapName are valid', () => {
-    const state = baseSession({
-      extractResult: {
-        jobId: 'job-1',
-        completedAt: 1,
-        shops: [],
-        collectionsCatalog: [],
-        shopCount: 0,
-        collectionCount: 0,
-      },
-    });
-    const result = route(
-      state,
-      'ready',
-      { type: 'IMPORT_START', protocolVersion: 1, mapName: 'マップ' },
-      deps,
-    );
+    const result = route(state, 'ready', { type: 'IMPORT_START', protocolVersion: 1 }, deps);
     expect(result.patch.uiStep).toBe('import_starting');
     expect(result.patch.activeJob).toEqual({ jobId: 'job-1', kind: 'import', startedAt: 1000 });
-    expect(result.tabCommand).toEqual({ kind: 'open_my_maps', jobId: 'job-1', mapName: 'マップ' });
+    expect(result.tabCommand).toEqual({ kind: 'ensure_saved_list', jobId: 'job-1' });
     expect(result.patch.pendingPermission).toBeUndefined();
   });
 
@@ -254,12 +207,7 @@ describe('route IMPORT_START', () => {
         collectionCount: 0,
       },
     });
-    const result = route(
-      state,
-      'ready',
-      { type: 'IMPORT_START', protocolVersion: 1, mapName: 'マップ' },
-      deps,
-    );
+    const result = route(state, 'ready', { type: 'IMPORT_START', protocolVersion: 1 }, deps);
     expect(result.patch).toEqual({});
     expect(result.tabCommand).toBeUndefined();
   });
@@ -276,18 +224,14 @@ describe('route PERMISSION_REQUEST_PENDING / PERMISSION_REQUEST_CANCELLED — ad
     expect(result.patch.pendingPermission).toEqual({ step: 'extract', requestedAt: 1000 });
   });
 
-  it('records a pending import intent with its mapName', () => {
+  it('records a pending import intent', () => {
     const result = route(
       baseSession(),
       'ready',
-      { type: 'PERMISSION_REQUEST_PENDING', protocolVersion: 1, step: 'import', mapName: 'マップ' },
+      { type: 'PERMISSION_REQUEST_PENDING', protocolVersion: 1, step: 'import' },
       deps,
     );
-    expect(result.patch.pendingPermission).toEqual({
-      step: 'import',
-      mapName: 'マップ',
-      requestedAt: 1000,
-    });
+    expect(result.patch.pendingPermission).toEqual({ step: 'import', requestedAt: 1000 });
   });
 
   it('clears a pending intent on cancellation', () => {
@@ -346,9 +290,9 @@ describe('routePermissionGranted — added 2026-08-04 (test-plan-phase2 Module 1
     expect(result.patch.pendingPermission).toBeUndefined();
   });
 
-  it('starts the import job when the pending step is import', () => {
+  it('starts the ensure-saved-list job when the pending step is import', () => {
     const state = baseSession({
-      pendingPermission: { step: 'import', mapName: 'マップ', requestedAt: 500 },
+      pendingPermission: { step: 'import', requestedAt: 500 },
       extractResult: {
         jobId: 'job-1',
         completedAt: 1,
@@ -360,7 +304,7 @@ describe('routePermissionGranted — added 2026-08-04 (test-plan-phase2 Module 1
     });
     const result = routePermissionGranted(state, 'ready', deps);
     expect(result.patch.uiStep).toBe('import_starting');
-    expect(result.tabCommand).toEqual({ kind: 'open_my_maps', jobId: 'job-1', mapName: 'マップ' });
+    expect(result.tabCommand).toEqual({ kind: 'ensure_saved_list', jobId: 'job-1' });
     expect(result.patch.pendingPermission).toBeUndefined();
   });
 
@@ -391,8 +335,7 @@ describe('route ERROR_RETRY', () => {
   it('retries import when retryStep is import', () => {
     const state = baseSession({
       uiStep: 'error',
-      mapName: 'マップ',
-      lastError: { code: 'MyMapsTabOpenFailed', message: 'x', retryStep: 'import', at: 1 },
+      lastError: { code: 'GoogleMapsTabOpenFailed', message: 'x', retryStep: 'import', at: 1 },
       extractResult: {
         jobId: 'job-1',
         completedAt: 1,
@@ -404,7 +347,7 @@ describe('route ERROR_RETRY', () => {
     });
     const result = route(state, 'ready', { type: 'ERROR_RETRY', protocolVersion: 1 }, deps);
     expect(result.patch.uiStep).toBe('import_starting');
-    expect(result.tabCommand).toEqual({ kind: 'open_my_maps', jobId: 'job-1', mapName: 'マップ' });
+    expect(result.tabCommand).toEqual({ kind: 'ensure_saved_list', jobId: 'job-1' });
   });
 
   it('returns to ready when retryStep is none', () => {

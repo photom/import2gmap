@@ -45,7 +45,6 @@ This skill establishes the documentation architecture for this project, adhering
   - `docs/reference/extension-error-codes.md`
   - `docs/reference/extension-extract-confirm-sequences.md`
   - `docs/reference/tabelog-pc-saved-list-extraction-spec.md`
-  - `docs/reference/kml-data-schema.md`
   - `docs/reference/html-fixture-policy.md`
   - `docs/reference/architecture-diagrams.md`
 

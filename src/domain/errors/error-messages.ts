@@ -20,11 +20,10 @@ export const ERROR_MESSAGES: Record<string, string> = {
   SessionCorrupt: '保存中のデータが壊れていました。もう一度抽出してください。',
   SessionQuotaExceeded: '保存容量を超えたため抽出結果を保持できません。',
   NoExtractResult: 'インポートできる抽出結果がありません。先に抽出してください。',
-  InvalidMapName: 'マップ名を入力してください。',
   InternalError: '予期しないエラーが発生しました。',
-  MyMapsTabOpenFailed: 'Googleマイマップのタブを開けませんでした。',
-  MyMapsNotReady: 'マイマップページの準備を確認できませんでした。ログイン状態を確認して再試行してください。',
-  MyMapsUiChanged: 'マイマップの画面構成が想定と異なります。',
+  GoogleMapsTabOpenFailed: 'Googleマップのタブを開けませんでした。',
+  GoogleMapsNotReady: 'Googleマップの準備を確認できませんでした。ログイン状態を確認して再試行してください。',
+  GoogleMapsUiChanged: 'Googleマップの画面構成が想定と異なります。',
   ImportCancelled: 'インポートをキャンセルしました。',
 };
 

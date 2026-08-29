@@ -5,9 +5,7 @@
 Explain why the extension uses a **popup-only** stepped flow, how extract completion is an explicit intermediate step, and what the confirm screen summarizes before import starts.
 
 Normative UI rules: [`docs/reference/extension-ui-specifications.md`](../reference/extension-ui-specifications.md)  
-Baseline decisions: [`ADR-0004`](adr/0004-extension-implementation-baseline.md)
-
-**2026-08-29: "Import button vs Maps automation" and the My Maps references below are superseded by [ADR-0008](adr/0008-google-maps-saved-list-import.md)** (Google Maps native saved-list import replaces My Maps; there is no user-editable map name any more). The popup-only / explicit-`extract_complete`-step / no-shop-list rationale elsewhere in this doc is unaffected.
+Baseline decisions: [`ADR-0004`](adr/0004-extension-implementation-baseline.md), [`ADR-0008`](adr/0008-google-maps-saved-list-import.md)
 
 ---
 
@@ -21,8 +19,8 @@ Unresolved product choices were settled for v1 UI as follows:
 | :--- | :--- |
 | Extract entry | Popup only (no in-page button) |
 | After successful extract | Show completion; user presses **次へ** (no auto-advance) |
-| Confirm content | Counts only (shops + collections), plus editable map name |
-| Doc scope | Through **My Maps へインポート** button; Maps DOM automation later |
+| Confirm content | Counts only (shops + collections); target list name is fixed (`食べログ`, ADR-0008), not user-editable |
+| Doc scope | Through **保存リストを準備する** button; Maps DOM automation later |
 
 ---
 
@@ -42,9 +40,9 @@ Auto-advancing into confirm can hide failures and rush import. A completion scre
 
 - Makes “full crawl finished” a visible success moment.
 - Lets the user **やり直す** before import framing.
-- Separates extraction success from “ready to name the map / import”.
+- Separates extraction success from “ready to import”.
 
-Confirm then focuses on **decision** (counts + map name + import), not on re-stating the crawl animation.
+Confirm then focuses on **decision** (counts + import), not on re-stating the crawl animation.
 
 ---
 
@@ -54,7 +52,7 @@ v1 confirm shows:
 
 - Unique shop count  
 - Collection kind count = unique ids in `collectionsCatalog` after crawl (`0` if empty) — **confirmed**  
-- Map name field (default dated title)
+- A short hint naming the fixed target list (`食べログ`) — no input, per ADR-0008
 
 A scrollable shop list was deferred to reduce popup height and privacy surface in the small UI. Collections remain in session data for a **future** pin-color design (ADR-0005) without exposing a color UI yet.
 
@@ -62,7 +60,7 @@ A scrollable shop list was deferred to reduce popup height and privacy surface i
 
 ## Import button vs Maps automation
 
-The primary **My Maps へインポート** control is in scope so the full happy path is visible in the popup. What happens inside My Maps (selectors, waits, success toast) stays behind the ADR-0004 spike and a future reference doc. The popup only owns: validate name, session handoff, optional host prompt, open/focus a **new-map** My Maps tab, show `import_starting` / errors. Exact Maps URL remains spike detail.
+The primary **保存リストを準備する** control is in scope so the full happy path is visible in the popup. What happens inside Google Maps (selectors, waits) stays behind the ADR-0008 spike notes and the messaging protocol. The popup only owns: session handoff, optional host prompt, open/focus a Google Maps tab, show `import_starting` / errors. This step currently only ensures the `食べログ` list exists — it does not add any shops yet (see ADR-0008 open items).
 
 ---
 
@@ -74,7 +72,7 @@ flowchart TB
   worker -->|progress_result_error| popup
   worker -->|inject| tabelog[Tabelog_content_script]
   worker -->|session_read_write| session[chrome.storage.session]
-  worker -->|inject_later| mymaps[MyMaps_content_script]
+  worker -->|inject_later| gmaps[GoogleMaps_content_script]
 ```
 
 UI state (`ready` / `extracting` / …) is derived from worker + session. **Confirmed**: closing the popup during extract does **not** cancel; the worker keeps running and reopening reconnects to progress or the terminal state.
@@ -87,4 +85,4 @@ UI state (`ready` / `extracting` / …) is derived from worker + session. **Conf
 | :--- | :--- |
 | Confirm collection count | `collectionsCatalog` unique id count |
 | Popup close while extracting | Continue in service worker; reconnect on reopen |
-| My Maps URL on import | Deferred to spike; UI only requires open/focus for new map |
+| Target list name | Fixed to `食べログ` (ADR-0008); not user-editable |

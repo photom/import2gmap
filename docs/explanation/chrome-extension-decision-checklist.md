@@ -9,7 +9,7 @@ Inventory of product and engineering decisions for the Manifest V3 + TypeScript 
 | Delivery form | Desktop Chrome Manifest V3 extension, TypeScript → bundled JS | [ADR-0003](adr/0003-chrome-extension-my-maps-web-import.md) |
 | Extract source | PC saved-list DOM only (fixed selectors) | [ADR-0003](adr/0003-chrome-extension-my-maps-web-import.md), [extraction spec](../reference/tabelog-pc-saved-list-extraction-spec.md) |
 | Fields | name, address, URL; optional short description; URL first line of description; **collections** (`id` + `name`, may be empty) | extraction spec, [ADR-0005](adr/0005-extract-collections-for-future-pin-styling.md) |
-| Import path | **Superseded 2026-08-29**: Google Maps native saved-list automation — ensure `食べログ` list exists, dedupe-check each shop, search-by-address + add or skip (no Drive API / OAuth tokens). ~~In-memory KML → My Maps Web UI, always a new map~~ | [ADR-0008](adr/0008-google-maps-saved-list-import.md) (was [ADR-0003](adr/0003-chrome-extension-my-maps-web-import.md)) |
+| Import path | Google Maps native saved-list automation — ensure `食べログ` list exists (**implemented**), dedupe-check each shop / search-by-address / add-or-skip (**not implemented yet**). My Maps / KML code has been deleted from this repository. | [ADR-0008](adr/0008-google-maps-saved-list-import.md) |
 | Privacy | User-started only; no credentials, cookies, profile reads; bookmarks JSON allowlists `labels` only | [ADR-0003](adr/0003-chrome-extension-my-maps-web-import.md), [ADR-0005](adr/0005-extract-collections-for-future-pin-styling.md) |
 | Failure | Selector/UI/count mismatch → explicit failure; no fake full success | [ADR-0003](adr/0003-chrome-extension-my-maps-web-import.md) |
 | Permissions & injection | See ADR-0004 | [ADR-0004](adr/0004-extension-implementation-baseline.md) |
@@ -19,11 +19,9 @@ Inventory of product and engineering decisions for the Manifest V3 + TypeScript 
 | Extracted data handoff | `chrome.storage.session` schema | [ADR-0004](adr/0004-extension-implementation-baseline.md), [session schema](../reference/extension-session-storage-schema.md) |
 | Messaging | Typed popup ↔ worker ↔ content protocol | [messaging](../reference/extension-messaging-protocol.md) |
 | Error catalog | Stable codes + Japanese UI strings | [error codes](../reference/extension-error-codes.md) |
-| KML schema | Placemark + URL-first description; no collection styles in v1 | [kml-data-schema](../reference/kml-data-schema.md) |
 | Privacy model | No cookies/tokens/phones/memos | [security-privacy](security-privacy-model.md) |
-| Test fixtures & plan | Sanitized HTML under `test/fixtures/tabelog/` + Phase 1 (domain) / Phase 2 (entrypoint wiring) Test Plans | [html-fixture-policy](../reference/html-fixture-policy.md), [Phase 1 plan](../reference/test-plan-phase1.md), [Phase 2 plan](../reference/test-plan-phase2.md) |
-| My Maps spike gate | **Superseded 2026-08-29** — the My Maps import path itself is superseded by [ADR-0008](adr/0008-google-maps-saved-list-import.md); this spike's findings are historical. Was: **Passed** (2026-08-02) — selectors, success/failure detection, and policy note recorded, plus two picker-layout addenda (cross-origin `docs.google.com/picker` iframe; "picker v2" source-nav layout) | [ADR-0004](adr/0004-extension-implementation-baseline.md), [spike results](my-maps-import-spike-results.md) (historical) |
-| Google Maps saved-list spike gate | **Pending** — required before implementing the ADR-0008 import path: list-exists/create, duplicate-detection, address search + resolve, add-to-list, all with explicit failure on unexpected UI | [ADR-0008](adr/0008-google-maps-saved-list-import.md) |
+| Test fixtures & plan | Sanitized HTML under `test/fixtures/tabelog/` (extraction) + `test/fixtures/google-maps/` (saved-list pane) + Phase 1/2/4 Test Plans | [html-fixture-policy](../reference/html-fixture-policy.md), [Phase 1 plan](../reference/test-plan-phase1.md), [Phase 2 plan](../reference/test-plan-phase2.md), [Phase 4 plan](../reference/test-plan-phase4.md) |
+| Google Maps saved-list spike gate | **Partial** — "ensure the list exists" (menu → Saved pane → detect/create/rename `食べログ`) captured and implemented from a real English-locale DOM capture; see [spike notes](google-maps-saved-list-spike-notes.md). Duplicate-detection, address search, and add-to-list are **not captured yet** | [ADR-0008](adr/0008-google-maps-saved-list-import.md) |
 
 ## Flow (accepted architecture, updated per ADR-0008)
 
@@ -36,7 +34,7 @@ flowchart LR
   shops --> gmaps
 ```
 
-Previously (superseded): `tabelog --> kml[KML_in_memory] --> mymaps[MyMaps_ContentScript]`. No KML is built in the new flow — the extracted shop data (name/address/URL) is passed directly to the Google Maps saved-list automation for dedupe-check, search, and add-or-skip.
+No KML is built in this flow — the extracted shop data (name/address/URL) is passed directly to the Google Maps saved-list automation. Only the `gmaps` node's "ensure list exists" step is implemented so far; dedupe-check/search/add-or-skip are not yet wired up.
 
 ## Open / deferred (change only with ADR or explicit product change)
 
@@ -44,10 +42,10 @@ Previously (superseded): `tabelog --> kml[KML_in_memory] --> mymaps[MyMaps_Conte
 | :--- | :--- |
 | Chrome Web Store listing | Deferred; develop via Load unpacked first. Options, prerequisites, and the policy risk that must be reviewed before closing this item are laid out in [distribute-extension](../how-to/distribute-extension.md) |
 | Playwright / browser E2E | Deferred; Vitest + sanitized HTML fixtures first |
-| KML user download | **Moot post-ADR-0008** — no KML is generated in the Google Maps saved-list import path |
-| Import into existing map | **Superseded framing** — there is no "map" in the ADR-0008 flow; the equivalent question is now "import into an existing saved list" (default: yes, reuse/create `食べログ` idempotently — see [ADR-0008](adr/0008-google-maps-saved-list-import.md)) |
-| Saved-list duplicate match rule | **Open** — name+address heuristic vs. a stored per-item identifier; to be settled during the ADR-0008 feasibility spike |
-| **Pin color per collection** | Deferred; extract `collections` / catalog now ([ADR-0005](adr/0005-extract-collections-for-future-pin-styling.md)). Styling mechanism itself is now open again post-ADR-0008 (no KML `<Style>` target any more) |
+| Import into an existing saved list | Default: yes, reuse/create `食べログ` idempotently — **implemented** (see [ADR-0008](adr/0008-google-maps-saved-list-import.md)) |
+| Saved-list duplicate match rule (per shop) | **Open** — name+address heuristic vs. a stored per-item identifier; not designed or implemented yet |
+| Address search + add-to-list | **Open** — not captured or implemented yet; see [spike notes](google-maps-saved-list-spike-notes.md) open follow-ups |
+| **Pin color / list styling per collection** | Deferred; extract `collections` / catalog now ([ADR-0005](adr/0005-extract-collections-for-future-pin-styling.md)). Styling mechanism itself is open (no KML `<Style>` target any more post-ADR-0008) |
 | Production telemetry | None; no PII in logs |
 
 When closing an open item, add or amend an ADR and update this table.

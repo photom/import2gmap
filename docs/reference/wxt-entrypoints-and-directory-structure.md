@@ -47,7 +47,7 @@ export default defineConfig({
 | `entrypoints/popup/main.tsx` | Popup Script | Mount React UI, attach event listeners, send/receive messages to background |
 | `entrypoints/background.ts` | Service Worker | Orchestrate extract/import jobs, manage WXT session storage, request permissions |
 | `entrypoints/tabelog.content.ts` | Content Script | Run DOM extraction on Tabelog PC saved-list pages (`tabelog.com`) |
-| `entrypoints/mymaps.content.ts` | Content Script | Run Web UI automation on Google My Maps pages (`google.com/maps`) |
+| `entrypoints/gmaps.content.ts` | Content Script | Run Web UI automation on Google Maps pages (`google.com/maps`) — native saved-list import, ADR-0008 |
 
 ---
 

@@ -14,7 +14,7 @@ the date of every revision, is available in the repository's commit log.
 ## 1. Overview
 
 tabelog2gmap is a Chrome extension that imports the restaurants a user has saved on
-tabelog.com into that user's own Google My Maps.
+tabelog.com into a saved list in that user's own Google Maps.
 
 **The extension has no developer-operated server.** No data is transmitted to the developer
 or to any third-party analytics service. All processing happens locally in the user's
@@ -27,10 +27,10 @@ Tabelog saved-list page the user is already viewing, the extension reads:
 
 | Data | Purpose |
 | :--- | :--- |
-| Restaurant name | Name of the placemark in My Maps |
-| Restaurant street address | To place the placemark on the map |
-| Restaurant's public tabelog.com URL | Placemark description; duplicate detection |
-| Area / cuisine-category text | Placemark description |
+| Restaurant name | Used to check for and add the saved-list entry |
+| Restaurant street address | To locate the restaurant on the map |
+| Restaurant's public tabelog.com URL | Duplicate detection |
+| Area / cuisine-category text | Retained alongside the restaurant's other extracted fields |
 | Collection (label) name and id | Retained as the restaurant's grouping information |
 | List counts and pagination controls | To crawl every page without missing entries |
 
@@ -60,15 +60,15 @@ Extracted data is stored only in `chrome.storage.session`.
 No data is disclosed to the developer or to any third party. The extension contains no
 advertising, analytics, or tracking components, and no data is ever sold.
 
-The one exception, performed only at the user's explicit request: when the user chooses
-"import to My Maps", the extracted restaurants are handed to **the user's own Google My
-Maps account** as a KML file, through the user's own already-authenticated browser session.
-The extension does not handle Google credentials or tokens at any point. Once imported, the
-data is governed by Google's privacy policy.
+The one exception, performed only at the user's explicit request: when the user starts the
+import step, the extension automates **the user's own Google Maps account**, through the
+user's own already-authenticated browser session, to create or reuse a saved list named
+食べログ. The extension does not handle Google credentials or tokens at any point. Once
+imported, the data is governed by Google's privacy policy.
 
 ## 6. Permissions
 
-Host access to tabelog.com and Google My Maps is declared as **optional** and is requested
+Host access to tabelog.com and Google Maps is declared as **optional** and is requested
 at the moment the user starts an extraction or an import — never at install time. If the
 user declines, the extension does not act on any page.
 

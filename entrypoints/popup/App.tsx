@@ -4,7 +4,7 @@ import { errorMessageFor } from '@/src/domain/errors/error-messages';
 import { isWorkerToPopupMessage } from '@/src/domain/messaging/message-types';
 import type { PopupToWorkerMessage, UiStateSnapshot } from '@/src/domain/messaging/message-types';
 import { TABELOG_ORIGINS } from '@/src/infrastructure/permissions/tabelog-origins';
-import { MY_MAPS_ORIGINS } from '@/src/infrastructure/permissions/my-maps-origins';
+import { GOOGLE_MAPS_ORIGINS } from '@/src/infrastructure/permissions/google-maps-origins';
 import './App.css';
 
 const IN_PROGRESS_POLL_MS = 1_000;
@@ -18,14 +18,12 @@ type PermissionError = { readonly code: string; readonly message: string };
 
 export default function App() {
   const [snapshot, setSnapshot] = useState<UiStateSnapshot | undefined>(undefined);
-  const [mapNameDraft, setMapNameDraft] = useState('');
   const [permissionError, setPermissionError] = useState<PermissionError | undefined>(undefined);
 
   const refresh = useCallback(async () => {
     const reply = await sendToWorker({ type: 'GET_UI_STATE', protocolVersion: 1 });
     if (reply?.type === 'UI_STATE') {
       setSnapshot(reply.snapshot);
-      setMapNameDraft(reply.snapshot.mapName ?? '');
     }
   }, []);
 
@@ -79,23 +77,17 @@ export default function App() {
 
   const handleImportStart = useCallback(async () => {
     // See handleExtractStart's comment: same permission-prompt-kills-popup concern, so the same
-    // record-before-prompt pattern applies here, carrying mapName since the worker needs it to
-    // run the import job without the popup.
-    await sendToWorker({
-      type: 'PERMISSION_REQUEST_PENDING',
-      protocolVersion: 1,
-      step: 'import',
-      mapName: mapNameDraft,
-    });
-    const granted = await browser.permissions.request({ origins: [...MY_MAPS_ORIGINS] });
+    // record-before-prompt pattern applies here.
+    await sendToWorker({ type: 'PERMISSION_REQUEST_PENDING', protocolVersion: 1, step: 'import' });
+    const granted = await browser.permissions.request({ origins: [...GOOGLE_MAPS_ORIGINS] });
     if (!granted) {
       await sendToWorker({ type: 'PERMISSION_REQUEST_CANCELLED', protocolVersion: 1 });
       setPermissionError({ code: 'HostPermissionDenied', message: errorMessageFor('HostPermissionDenied') });
       return;
     }
     setPermissionError(undefined);
-    await sendAndRefresh({ type: 'IMPORT_START', protocolVersion: 1, mapName: mapNameDraft });
-  }, [mapNameDraft, sendAndRefresh]);
+    await sendAndRefresh({ type: 'IMPORT_START', protocolVersion: 1 });
+  }, [sendAndRefresh]);
 
   if (!snapshot) {
     return <main className="popup">読み込み中…</main>;
@@ -169,16 +161,7 @@ export default function App() {
         <section>
           <p>店舗数: {view.shopCount ?? 0}</p>
           <p>コレクション: {view.collectionCount ?? 0} 種類</p>
-          <label>
-            マップ名
-            <input
-              value={mapNameDraft}
-              onChange={(e) => setMapNameDraft(e.target.value)}
-              onBlur={() =>
-                void sendAndRefresh({ type: 'MAP_NAME_SET', protocolVersion: 1, mapName: mapNameDraft })
-              }
-            />
-          </label>
+          <p className="hint">Google マップの保存リスト「食べログ」を確認・作成します。</p>
           <button
             onClick={() =>
               void sendAndRefresh({ type: 'UI_STEP_SET', protocolVersion: 1, uiStep: 'extract_complete' })
@@ -186,19 +169,19 @@ export default function App() {
           >
             戻る
           </button>
-          <button onClick={() => void handleImportStart()}>My Maps へインポート</button>
+          <button onClick={() => void handleImportStart()}>保存リストを準備する</button>
         </section>
       )}
 
       {view.screen === 'import_starting' && (
         <section>
-          <p>権限確認・My Maps タブ準備中です…</p>
+          <p>権限確認・Google マップの準備中です…</p>
         </section>
       )}
 
       {view.screen === 'import_succeeded' && (
         <section>
-          <p>「{view.mapName}」に{view.shopCount ?? 0}件の店舗をインポートしました。</p>
+          <p>Google マップの保存リスト「食べログ」の準備ができました。</p>
           <button onClick={() => void sendAndRefresh({ type: 'EXTRACT_DISCARD', protocolVersion: 1 })}>
             完了
           </button>

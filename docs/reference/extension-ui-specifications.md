@@ -7,11 +7,9 @@ Extraction field rules: [tabelog-pc-saved-list-extraction-spec.md](tabelog-pc-sa
 Design rationale: [extension-ui-design.md](../explanation/extension-ui-design.md).  
 Messaging / session / errors / sequences: [messaging](extension-messaging-protocol.md), [session](extension-session-storage-schema.md), [errors](extension-error-codes.md), [sequences](extension-extract-confirm-sequences.md).
 
-**2026-08-29: import-step details below (map naming, `import_succeeded` wording, "My Maps へインポート" button copy, Section 5/3.6b) reflect the superseded My Maps flow** — see [ADR-0008](../explanation/adr/0008-google-maps-saved-list-import.md). Extract/confirm screens (Sections 3.1–3.5) are largely unaffected in shape, though the confirm screen's editable map name goes away (the target list name `食べログ` is fixed, not user-chosen); the import-step screens will be redesigned once the ADR-0008 spike lands.
-
 **v1 entry point**: popup only. Do **not** inject an extract button or toolbar into the Tabelog page.
 
-**Scope of this document**: screens and transitions through the **Import** primary action. My Maps DOM automation after that action is specified elsewhere / gated by the ADR-0004 spike.
+**Scope of this document**: screens and transitions through the **Import** primary action. Google Maps DOM automation after that action is specified in the [messaging protocol §6](extension-messaging-protocol.md#6-service-worker--google-maps-content-script-adr-0008) and the [spike notes](../explanation/google-maps-saved-list-spike-notes.md) (ADR-0008). The import step currently only implements "ensure the `食べログ` saved list exists" — it does not yet add any shops to it.
 
 ---
 
@@ -22,7 +20,7 @@ Messaging / session / errors / sequences: [messaging](extension-messaging-protoc
 | Toolbar action popup | Sole user UI for extract → complete → confirm → import start |
 | Service worker | Orchestration, `chrome.storage.session`, scripting, optional host prompts |
 | Tabelog content script | Injected only after user starts extract (no persistent page chrome) |
-| My Maps content script | Injected only after user starts import (details out of scope here) |
+| Google Maps content script | Injected only after user starts import (details out of scope here) |
 
 Popup copy is **Japanese** unless a future i18n ADR says otherwise.
 
@@ -99,8 +97,8 @@ Do **not** auto-advance to `confirm`.
 | :--- | :--- | :--- |
 | Shop count | text | Unique shop count from session |
 | Collection count | text | **Unique ids in `collectionsCatalog` after crawl** (`0` if empty). Do not use distinct-on-shops as the displayed count. |
-| Map name | text input | Default `食べログ保存リスト YYYY-MM-DD` (local date); user-editable; required non-empty after sanitize |
-| **My Maps へインポート** | primary button | Starts import prelude (Section 5) |
+| Hint | text | Names the fixed target list (「食べログ」保存リストを確認・作成する旨). Not an input — the list name is fixed per [ADR-0008](../explanation/adr/0008-google-maps-saved-list-import.md), unlike the superseded My Maps flow's editable map name |
+| **保存リストを準備する** | primary button | Starts import prelude (Section 5) |
 | **戻る** | secondary button | → `extract_complete` (session data retained) |
 
 Do **not** show a scrollable shop-name list on this screen (v1).
@@ -109,25 +107,23 @@ Pin-color / per-collection styling controls are **not** shown (deferred; ADR-000
 
 ### 3.6 `import_starting` — インポート開始中
 
-Entered after **My Maps へインポート**.
+Entered after **保存リストを準備する**.
 
 | Element | Type | Rules |
 | :--- | :--- | :--- |
-| Status | text | 権限確認・My Maps タブ準備中である旨 |
+| Status | text | 権限確認・Google マップの準備中である旨 |
 | **キャンセル** | secondary | Best-effort cancel before DOM automation commits; if automation already past the point of no return, show explicit failure instead of silent success |
 
-Detailed My Maps step UI (progress inside Maps) may replace this screen in a later spec; v1 only requires this gate + handoff.
+Detailed Google Maps step UI (progress inside Maps) may replace this screen in a later spec; v1 only requires this gate + handoff.
 
 ### 3.6b `import_succeeded` — インポート完了
 
-Entered once the My Maps content script confirms the KML import succeeded (see [messaging protocol §6](extension-messaging-protocol.md#6-service-worker--my-maps-content-script)).
+Entered once the Google Maps content script confirms the `食べログ` saved list exists (created if it didn't; see [messaging protocol §6](extension-messaging-protocol.md#6-service-worker--google-maps-content-script-adr-0008)). This does **not** mean any shop was added to it — see the ADR-0008 open items.
 
 | Element | Type | Rules |
 | :--- | :--- | :--- |
-| Result | text | 例:「{mapName} に {shopCount} 件の店舗をインポートしました」 |
+| Result | text | 例:「Google マップの保存リスト「食べログ」の準備ができました」 |
 | **完了** | primary button | Sends `EXTRACT_DISCARD`; clears the session extract payload and returns to `ready` |
-
-The My Maps document itself is renamed to `mapName` as part of the import automation, before the KML import step runs (see [messaging protocol §6](extension-messaging-protocol.md#6-service-worker--my-maps-content-script) and [spike results §2b](../explanation/my-maps-import-spike-results.md)) — the map does **not** keep Google's default title after a successful import. A rename failure is treated as an explicit import failure (`error` screen), not a silent partial success, since this screen's text asserts the map name.
 
 ### 3.7 `error` — エラー
 
@@ -155,7 +151,7 @@ extracting -- failure --> error
 extract_complete --[次へ]--> confirm
 extract_complete --[やり直す]--> ready
 confirm --[戻る]--> extract_complete
-confirm --[My Maps へインポート]--> import_starting
+confirm --[保存リストを準備する]--> import_starting
 import_starting -- success --> import_succeeded
 import_starting -- failure --> error
 import_succeeded --[完了]--> ready
@@ -186,15 +182,13 @@ stateDiagram-v2
 
 ## 5. Import Primary Action (UI contract only)
 
-On **My Maps へインポート**:
+On **保存リストを準備する**:
 
-1. Validate map name (non-empty, sanitized plain text; max length e.g. 80).
-2. Persist map name with session extract payload.
-3. Request My Maps optional host permission if not granted → deny → `error(HostPermissionDenied)`.
-4. Open or focus a My Maps Web UI tab suitable for **new map** creation (exact URL is an implementation detail; must not require the extension to handle Google login UI).
-5. Hand off to My Maps content-script automation. Popup shows `import_starting` while the worker drives the Maps tab, then `import_succeeded` (Section 3.6b) or `error` once the automation reports its result.
+1. Request the Google Maps optional host permission if not granted → deny → `error(HostPermissionDenied)`.
+2. Open or focus a Google Maps Web UI tab (must not require the extension to handle Google login UI).
+3. Hand off to the Google Maps content-script automation (`GMAPS_ENSURE_LIST`, fixed `食べログ` target list name — no map name to validate or persist, unlike the superseded My Maps flow). Popup shows `import_starting` while the worker drives the Maps tab, then `import_succeeded` (Section 3.6b) or `error` once the automation reports its result.
 
-This document does **not** specify Maps DOM selectors — see [spike results](../explanation/my-maps-import-spike-results.md) for those.
+This document does **not** specify Maps DOM selectors — see the [spike notes](../explanation/google-maps-saved-list-spike-notes.md) for those.
 
 ---
 
@@ -210,14 +204,14 @@ This document does **not** specify Maps DOM selectors — see [spike results](..
 ## 7. Permissions UX
 
 - First **抽出する** may trigger `optional_host_permissions` for Tabelog hosts.
-- First **My Maps へインポート** may trigger optional hosts for Google Maps / My Maps.
+- First **保存リストを準備する** may trigger optional hosts for Google Maps.
 - Explain in short status text that site access is needed for that step; no custom HTML permission page required beyond Chrome’s prompt.
 
 **Chrome's permission prompt closes the popup — added 2026-08-04.** Chrome's native
 optional-host-permission confirmation dialog takes focus, which closes the extension popup and
 destroys its JS execution context. The popup cannot rely on anything it does *after* `await`ing
 `browser.permissions.request(...)` — that continuation never runs once the dialog appears. To
-avoid making the user press **抽出する** / **My Maps へインポート** a second time after granting:
+avoid making the user press **抽出する** / **保存リストを準備する** a second time after granting:
 
 - The popup records the pending step in session storage (`pendingPermission`; see
   [session schema §5a](extension-session-storage-schema.md#5a-pending-permission-added-2026-08-04))
@@ -240,7 +234,7 @@ avoid making the user press **抽出する** / **My Maps へインポート** a 
 - In-page extract button / floating bar on Tabelog
 - Shop list / per-row edit on confirm
 - Collection color picker
-- KML download button
+- Choosing/editing the target saved-list name (fixed to `食べログ`, ADR-0008)
 - Opening saved-list URL automatically for the user
 - Auto-advance from `extract_complete` to `confirm`
 

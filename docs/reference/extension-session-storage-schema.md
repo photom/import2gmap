@@ -2,9 +2,7 @@
 
 Schema for `chrome.storage.session` used between extract, confirm, and import start.
 
-Related: [messaging](extension-messaging-protocol.md), [UI spec](extension-ui-specifications.md), [extraction spec](tabelog-pc-saved-list-extraction-spec.md), [ADR-0004](../explanation/adr/0004-extension-implementation-baseline.md).
-
-**2026-08-29: import-side fields below (`mapName`, the `import_*` / `confirm` `uiStep`s as scoped to map naming) reflect the superseded My Maps flow** — see [ADR-0008](../explanation/adr/0008-google-maps-saved-list-import.md). The extraction-side schema (Sections 3–4, `StoredShop`/`StoredExtractResult`) is unaffected; the import-side schema will be redesigned (list name is now fixed to `食べログ`, not user-editable per run; a per-shop skip/added/duplicate outcome replaces the single map-level success) once the ADR-0008 spike lands.
+Related: [messaging](extension-messaging-protocol.md), [UI spec](extension-ui-specifications.md), [extraction spec](tabelog-pc-saved-list-extraction-spec.md), [ADR-0008](../explanation/adr/0008-google-maps-saved-list-import.md).
 
 ---
 
@@ -29,7 +27,6 @@ Single root object under key `import2gmap` (recommended) to avoid key sprawl:
 type SessionRoot = {
   schemaVersion: 1;
   uiStep: UiStep;
-  mapName: string;
   activeJob?: ActiveJob;
   extractResult?: StoredExtractResult;
   lastError?: StoredError;
@@ -112,11 +109,12 @@ Invariants:
 
 ---
 
-## 5. Map name
+## 5. Target list name
 
-- Default when entering `extract_complete` or first `confirm`: `食べログ保存リスト YYYY-MM-DD` (local timezone date).
-- Stored in `mapName`; updated by `MAP_NAME_SET`.
-- Required non-empty at `IMPORT_START` after sanitize (max 80).
+Fixed per [ADR-0008](../explanation/adr/0008-google-maps-saved-list-import.md): the target Google
+Maps saved list is always named `食べログ` (`TARGET_SAVED_LIST_NAME`,
+`src/domain/google-maps/constants.ts`), not user-editable per run, so — unlike the superseded My
+Maps flow's `mapName` — nothing about it is stored in the session.
 
 ---
 
@@ -125,7 +123,6 @@ Invariants:
 ```ts
 type PendingPermission = {
   step: "extract" | "import";
-  mapName?: string; // only meaningful when step === "import"
   requestedAt: number; // epoch ms
 };
 ```
@@ -133,7 +130,7 @@ type PendingPermission = {
 Why this exists: Chrome's optional-host-permission confirmation dialog takes focus and destroys
 the popup's execution context, so a popup `await`ing `browser.permissions.request(...)` never
 gets to send `EXTRACT_START` / `IMPORT_START` once the dialog appears — without this, the user
-had to press 抽出する / My Maps へインポート a second time after granting (see
+had to press 抽出する / インポート a second time after granting (see
 [messaging protocol](extension-messaging-protocol.md), `PERMISSION_REQUEST_PENDING`).
 
 - **Written by**: the popup, right before calling `browser.permissions.request(...)` — awaited so
@@ -180,7 +177,7 @@ Kept so popup reopen on `error` can show the same code/message. Cleared on succe
 | User **次へ** | `confirm` |
 | User **戻る** | `extract_complete` |
 | Import prelude / automation running | `import_starting` |
-| Import automation succeeded | `import_succeeded` |
+| `食べログ` saved list confirmed to exist (created if missing) | `import_succeeded` |
 | Failure | `error` |
 | Discard / cancel to idle | `ready` (or wrong_* on next open) |
 

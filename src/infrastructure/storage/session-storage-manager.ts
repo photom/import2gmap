@@ -4,16 +4,11 @@ import type { SessionRoot, StoredExtractResult } from '../../domain/models/sessi
 
 const SESSION_KEY = 'session:import2gmap' as const;
 
-function defaultMapName(): string {
-  const date = new Date().toISOString().slice(0, 10);
-  return `食べログ保存リスト ${date}`;
-}
-
 export class SessionStorageManager {
   async read(): Promise<SessionRoot> {
     const raw = await storage.getItem(SESSION_KEY);
     if (raw === null) {
-      return { schemaVersion: 1, uiStep: 'ready', mapName: defaultMapName() };
+      return { schemaVersion: 1, uiStep: 'ready' };
     }
     return validateSessionRoot(raw);
   }
@@ -38,12 +33,7 @@ export class SessionStorageManager {
   }
 
   async discard(): Promise<void> {
-    const current = await this.read();
-    const next: SessionRoot = {
-      schemaVersion: 1,
-      uiStep: 'ready',
-      mapName: current.mapName,
-    };
+    const next: SessionRoot = { schemaVersion: 1, uiStep: 'ready' };
     await storage.setItem(SESSION_KEY, next);
   }
 }

@@ -16,19 +16,19 @@ flowchart TD
     Popup["popup/ (UI Surface)"]
     Background["background.ts (Service Worker / Orchestrator)"]
     TabelogCS["tabelog.content.ts (Tabelog DOM Scraper)"]
-    MyMapsCS["mymaps.content.ts (My Maps Automation)"]
+    GoogleMapsCS["gmaps.content.ts (Google Maps Saved-List Automation, ADR-0008)"]
   end
 
   subgraph Application ["Application Layer (`src/application/`)"]
     ExtractUC["ExtractSavedListUseCase"]
-    ImportUC["ImportToMyMapsUseCase"]
+    ImportUC["EnsureSavedListUseCase"]
     UiStateStore["UiStateStore / State Machine"]
   end
 
   subgraph Domain ["Domain Layer (`src/domain/`)"]
     Parser["TabelogSavedListParser"]
     Sanitizer["FieldSanitizer"]
-    KmlBuilder["KmlBuilder"]
+    SavedListsPane["SavedListsPaneParser"]
     ErrorCatalog["ErrorCatalog"]
   end
 
@@ -43,8 +43,9 @@ flowchart TD
   Background <--> ImportUC
   ExtractUC --> Parser
   ExtractUC --> Sanitizer
-  ImportUC --> KmlBuilder
+  ImportUC --> SavedListsPane
   TabelogCS --> Parser
+  GoogleMapsCS --> SavedListsPane
 ```
 
 ---
@@ -62,13 +63,13 @@ import2gmap/
 │   │   └── main.tsx             # Popup UI mount & event listeners (React)
 │   ├── background.ts            # Service worker orchestrator (defineBackground)
 │   ├── tabelog.content.ts       # Tabelog DOM scraper script (defineContentScript)
-│   └── mymaps.content.ts        # My Maps Web UI script (defineContentScript)
+│   └── gmaps.content.ts         # Google Maps saved-list script (defineContentScript, ADR-0008)
 ├── src/                         # Pure TypeScript core logic
 │   ├── domain/
 │   │   ├── models/              # ExtractedShop, CollectionRef, ExtractedSavedList
 │   │   ├── parser/              # TabelogSavedListParser, AddressParser
 │   │   ├── sanitizer/           # FieldSanitizer (NFKC, HTML strip, max-length truncate)
-│   │   ├── kml/                 # KmlBuilder (OGC KML 2.2 generator)
+│   │   ├── google-maps/         # Saved-lists pane parser + detectors (ADR-0008)
 │   │   └── errors/              # ExtensionError definitions
 │   ├── application/
 │   │   ├── extract-use-case.ts  # Multi-page crawl orchestration logic
@@ -96,7 +97,7 @@ import { defineConfig } from 'wxt';
 export default defineConfig({
   manifest: {
     name: 'import2gmap',
-    description: '食べログの保存リストをGoogleマイマップへ自動インポートするChrome拡張機能',
+    description: '食べログの保存リストをGoogleマップの保存リストへ自動インポートするChrome拡張機能',
     version: '1.0.0',
     permissions: ['storage', 'activeTab', 'scripting'],
     optional_host_permissions: [
@@ -175,8 +176,8 @@ export default defineContentScript({
 ## 6. Testing Strategy with WXT & Vitest
 
 - **Pure Domain & Use Case Testing**:
-  - Test `TabelogSavedListParser`, `FieldSanitizer`, `KmlBuilder`, and `UiStateStore` in Vitest.
-  - Load HTML fixtures from `test/fixtures/tabelog/` into JSDOM / Happy-DOM.
+  - Test `TabelogSavedListParser`, `FieldSanitizer`, the Google Maps saved-lists pane parser/detectors, and `UiStateStore` in Vitest.
+  - Load HTML fixtures from `test/fixtures/tabelog/` and `test/fixtures/google-maps/` into JSDOM / Happy-DOM.
 - **WXT Entrypoint Testing**:
   - Entrypoints are thin wrappers that delegate directly to tested domain modules.
   - Mock `wxt/storage` and `wxt/browser` at the infrastructure boundary.

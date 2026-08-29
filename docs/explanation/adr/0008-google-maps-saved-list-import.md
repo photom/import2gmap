@@ -54,7 +54,33 @@ New import flow, run once per extraction:
 
 - **Positive**: imported shops land directly in the Google Maps surface the user actually uses; a single persistent list accumulates across multiple extraction runs instead of leaving behind a pile of one-off maps.
 - **Negative / Trade-offs**:
-  - **Superseded and now historical for the import path**: ADR-0003's My Maps import-path decision, ADR-0004 §1's My Maps/picker permissions and §6's spike gate/pass criteria, and every finding in [`my-maps-import-spike-results.md`](../my-maps-import-spike-results.md) (map creation, KML picker iframe, map-title rename). Extraction-phase decisions in both ADRs are untouched.
+  - **Superseded and now historical for the import path**: ADR-0003's My Maps import-path decision and ADR-0004 §1's My Maps/picker permissions and §6's spike gate/pass criteria. Extraction-phase decisions in both ADRs are untouched. (2026-08-29: the old My Maps automation code and its spike-results doc have since been deleted outright — see the update below — rather than kept as superseded/historical files.)
   - **New dedup design work.** The old flow never needed a "does this already exist" check; the matching rule (name+address heuristic vs. a stored identifier) still needs to be designed and validated against the real saved-list UI during the spike — this ADR states the requirement, not the algorithm.
-  - **Every downstream reference doc that encoded My Maps specifics is now stale for the import path** and needs a follow-up rewrite once the new spike's selectors/flow are known: [messaging protocol §6](../../reference/extension-messaging-protocol.md#6-service-worker--my-maps-content-script), the import-side fields in the [session storage schema](../../reference/extension-session-storage-schema.md) (`mapName`, import `uiStep`s), the `MyMaps*` codes in [error codes](../../reference/extension-error-codes.md), the entire [KML data schema](../../reference/kml-data-schema.md) (no KML at all in the new flow), the import-step screens/sequences in the [UI spec](../../reference/extension-ui-specifications.md) / [UI design](../extension-ui-design.md) / [extract-confirm sequences](../../reference/extension-extract-confirm-sequences.md), [quick-start](../../tutorials/quick-start.md), and the [Chrome Web Store permission justifications](../../reference/chrome-web-store-permission-justifications.md). These are tracked as open items in the decision checklist, **not** resolved by this ADR — they get rewritten during the Canon TDD implementation phase (per `CLAUDE.md` §1) once the spike above has run.
+  - **Every downstream reference doc that encoded My Maps specifics is now stale for the import path** and needs a follow-up rewrite once the new spike's selectors/flow are known: the messaging protocol, the import-side fields in the session storage schema, the error codes, the import-step screens/sequences in the UI spec / UI design / extract-confirm sequences, quick-start, and the Chrome Web Store permission justifications. These are tracked as open items in the decision checklist — see the update below for what has since actually been rewritten.
   - A new feasibility spike is required before implementation can start, same undocumented-UI risk profile as the original My Maps spike.
+
+## 2026-08-29 update: My Maps deleted, ensure-list-exists step implemented
+
+Per explicit user direction, the superseded My Maps code and documentation have been **deleted**
+outright rather than merely marked superseded: `entrypoints/mymaps.content.ts`,
+`src/domain/my-maps/`, `src/domain/kml/`, `src/infrastructure/permissions/my-maps-origins.ts`,
+their tests, `my-maps-import-spike-results.md`, `kml-data-schema.md`, `test-plan-phase3.md`, and
+the `google-my-maps-web-import` skill are gone from this repository. ADR-0003 and ADR-0004 remain
+(their extraction-phase decisions are still in effect), each with a superseded-section note
+pointing here.
+
+A first real DOM capture against the live Google Maps UI (English locale) allowed implementing and
+shipping **step 1 of this ADR's flow — "ensure the `食べログ` list exists"** end to end (open the
+saved-lists pane, detect the list by name, create-and-rename it if missing):
+`src/domain/google-maps/` (pure detectors + pane parser, unit-tested against sanitized synthetic
+fixtures under `test/fixtures/google-maps/`), `entrypoints/gmaps.content.ts` (thin content-script
+wrapper), and `entrypoints/background.ts`'s `runEnsureListJob`. See the (sanitized, no personal
+data) [spike notes](google-maps-saved-list-spike-notes.md) for the DOM shape this relies on and
+what remains unconfirmed (most notably: Japanese-locale text fallbacks, and the exact rename-field
+interaction mechanism).
+
+**Still open, not yet implemented** (tracked in the decision checklist): per-shop duplicate
+detection against a list's actual contents, address search + single-result resolution, and adding
+a resolved place to the list. The popup's import step currently only exercises step 1 above; it
+does not yet add any shops to the list. Every downstream reference doc listed as stale above has
+now been rewritten to match this partial implementation (see the decision checklist).

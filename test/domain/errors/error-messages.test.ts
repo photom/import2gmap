@@ -12,8 +12,8 @@ describe('ERROR_MESSAGES', () => {
     expect(ERROR_MESSAGES.InternalError).toBe('予期しないエラーが発生しました。');
   });
 
-  it('has a message for MyMapsTabOpenFailed', () => {
-    expect(ERROR_MESSAGES.MyMapsTabOpenFailed).toBe('Googleマイマップのタブを開けませんでした。');
+  it('has a message for GoogleMapsTabOpenFailed', () => {
+    expect(ERROR_MESSAGES.GoogleMapsTabOpenFailed).toBe('Googleマップのタブを開けませんでした。');
   });
 
   it('has a message for ReturnToFirstPageFailed', () => {

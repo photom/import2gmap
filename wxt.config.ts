@@ -1,24 +1,20 @@
 import { defineConfig } from 'wxt';
 import { TABELOG_ORIGINS } from './src/infrastructure/permissions/tabelog-origins';
+import { GOOGLE_MAPS_ORIGINS } from './src/infrastructure/permissions/google-maps-origins';
 
 // See https://wxt.dev/api/config.html
 export default defineConfig({
   outDir: 'output',
   modules: ['@wxt-dev/module-react'],
   manifest: {
-    version: "0.0.1",
+    version: '0.0.1',
     name: 'tabelog2gmap',
-    description: '食べログの保存リストをGoogleマイマップへ自動インポートするChrome拡張機能',
+    description: '食べログの保存リストをGoogleマップの保存リストへ自動インポートするChrome拡張機能',
     permissions: ['storage', 'activeTab', 'scripting'],
-    // 'https://docs.google.com/picker*' (path-narrowed, not the whole docs.google.com origin):
-    // the My Maps KML import dialog is a cross-origin docs.google.com/picker iframe, and
-    // `scripting.executeScript` into a frame needs host permission for that frame's origin. See
-    // ADR-0004 §1 (2026-08-02 addendum) and the spike results' "cross-origin picker iframe" note.
-    optional_host_permissions: [
-      ...TABELOG_ORIGINS,
-      'https://www.google.com/maps/*',
-      'https://docs.google.com/picker*',
-    ],
+    // ADR-0008: the import target is Google Maps' native saved-list UI, not My Maps — no
+    // docs.google.com/picker* iframe origin is needed here (that was specific to the superseded
+    // My Maps KML upload dialog).
+    optional_host_permissions: [...TABELOG_ORIGINS, ...GOOGLE_MAPS_ORIGINS],
     action: {
       default_title: '保存リストを取り込む',
     },

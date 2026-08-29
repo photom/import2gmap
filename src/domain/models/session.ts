@@ -58,14 +58,12 @@ export type StoredError = {
 // grant lands. See message-router's `routePermissionGranted` and extension-ui-specifications §7.
 export type PendingPermission = {
   readonly step: 'extract' | 'import';
-  readonly mapName?: string; // only meaningful for step 'import'
   readonly requestedAt: number; // epoch ms; see isPendingPermissionFresh for the TTL check
 };
 
 export type SessionRoot = {
   readonly schemaVersion: 1;
   readonly uiStep: UiStep;
-  readonly mapName: string;
   readonly activeJob?: ActiveJob;
   readonly extractResult?: StoredExtractResult;
   readonly lastError?: StoredError;

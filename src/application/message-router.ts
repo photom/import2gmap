@@ -13,7 +13,7 @@ export const PENDING_PERMISSION_TTL_MS = 5 * 60 * 1000;
 
 export type TabCommand =
   | { readonly kind: 'start_extract'; readonly jobId: JobId }
-  | { readonly kind: 'open_my_maps'; readonly jobId: JobId; readonly mapName: string };
+  | { readonly kind: 'ensure_saved_list'; readonly jobId: JobId };
 
 export type RouteDeps = {
   readonly newJobId: () => string;
@@ -68,7 +68,6 @@ function buildSnapshot(state: SessionRoot, tabContext: TabContext): UiStateSnaps
       ...snapshot,
       shopCount: state.extractResult.shopCount,
       collectionCount: state.extractResult.collectionCount,
-      mapName: state.mapName,
     };
   }
   return snapshot;
@@ -118,10 +117,6 @@ function routeExtractDiscard(): RouteResult {
   return { patch: { extractResult: undefined, uiStep: 'ready', lastError: undefined } };
 }
 
-function routeMapNameSet(mapName: string): RouteResult {
-  return { patch: { mapName } };
-}
-
 // `message` always comes from the error catalog (`docs/reference/extension-error-codes.md` via
 // `errorMessageFor`) — the single source of truth for user-facing copy; never inline a string
 // here, or it will drift from the catalog the moment either one is edited.
@@ -139,35 +134,27 @@ function importPreludeFailure(code: string, retryStep: StoredError['retryStep'],
 // this, a resumed IMPORT_START (from `routePermissionGranted`, after the permission-prompt-kills-
 // popup fix) and a surviving popup's own IMPORT_START could both fire and start two import jobs.
 // See test-plan-phase2 Module 7.10.
-function routeImportStart(state: SessionRoot, mapName: string, deps: RouteDeps): RouteResult {
+function routeImportStart(state: SessionRoot, deps: RouteDeps): RouteResult {
   if (state.activeJob) {
     return { patch: {} };
   }
   if (!state.extractResult) {
     return importPreludeFailure('NoExtractResult', 'extract', deps.now());
   }
-  if (mapName.trim() === '') {
-    return importPreludeFailure('InvalidMapName', 'none', deps.now());
-  }
   const jobId = deps.newJobId();
   return {
     patch: {
       uiStep: 'import_starting',
       activeJob: { jobId, kind: 'import', startedAt: deps.now() },
-      mapName,
       lastError: undefined,
       pendingPermission: undefined,
     },
-    tabCommand: { kind: 'open_my_maps', jobId, mapName },
+    tabCommand: { kind: 'ensure_saved_list', jobId },
   };
 }
 
-function routePermissionRequestPending(
-  step: 'extract' | 'import',
-  mapName: string | undefined,
-  deps: RouteDeps,
-): RouteResult {
-  const pendingPermission: PendingPermission = { step, mapName, requestedAt: deps.now() };
+function routePermissionRequestPending(step: 'extract' | 'import', deps: RouteDeps): RouteResult {
+  const pendingPermission: PendingPermission = { step, requestedAt: deps.now() };
   return { patch: { pendingPermission } };
 }
 
@@ -214,7 +201,7 @@ export function routePermissionGranted(state: SessionRoot, tabContext: TabContex
     }
     return withPendingPermissionCleared(routeExtractStart(state, tabContext, deps));
   }
-  return withPendingPermissionCleared(routeImportStart(state, pending.mapName ?? '', deps));
+  return withPendingPermissionCleared(routeImportStart(state, deps));
 }
 
 function routeErrorRetry(state: SessionRoot, tabContext: TabContext, deps: RouteDeps): RouteResult {
@@ -225,7 +212,7 @@ function routeErrorRetry(state: SessionRoot, tabContext: TabContext, deps: Route
   }
   if (retryStep === 'import') {
     const clearedState: SessionRoot = { ...state, lastError: undefined, activeJob: undefined };
-    return routeImportStart(clearedState, state.mapName, deps);
+    return routeImportStart(clearedState, deps);
   }
   return { patch: { uiStep: 'ready', lastError: undefined } };
 }
@@ -247,20 +234,14 @@ export function route(
       return routeUiStepSet(state, message.uiStep);
     case 'EXTRACT_DISCARD':
       return routeExtractDiscard();
-    case 'MAP_NAME_SET':
-      return routeMapNameSet(message.mapName);
     case 'IMPORT_START':
-      return routeImportStart(state, message.mapName, deps);
+      return routeImportStart(state, deps);
     case 'IMPORT_CANCEL':
       return { patch: { uiStep: 'ready', activeJob: undefined } };
     case 'ERROR_RETRY':
       return routeErrorRetry(state, tabContext, deps);
     case 'PERMISSION_REQUEST_PENDING':
-      return routePermissionRequestPending(
-        message.step,
-        message.step === 'import' ? message.mapName : undefined,
-        deps,
-      );
+      return routePermissionRequestPending(message.step, deps);
     case 'PERMISSION_REQUEST_CANCELLED':
       return routePermissionRequestCancelled();
     default:

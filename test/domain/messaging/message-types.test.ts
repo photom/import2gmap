@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   isContentToWorkerMessage,
+  isGoogleMapsToWorkerMessage,
   isPopupToWorkerMessage,
   isWorkerToContentMessage,
+  isWorkerToGoogleMapsMessage,
   isWorkerToPopupMessage,
 } from '../../../src/domain/messaging/message-types';
 
@@ -48,16 +50,8 @@ describe('isPopupToWorkerMessage', () => {
     expect(isPopupToWorkerMessage({ type: 'EXTRACT_DISCARD', protocolVersion: 1 })).toBe(true);
   });
 
-  it('accepts MAP_NAME_SET with a mapName string', () => {
-    expect(
-      isPopupToWorkerMessage({ type: 'MAP_NAME_SET', protocolVersion: 1, mapName: '食べログ保存リスト' }),
-    ).toBe(true);
-  });
-
-  it('accepts IMPORT_START with a mapName string', () => {
-    expect(
-      isPopupToWorkerMessage({ type: 'IMPORT_START', protocolVersion: 1, mapName: 'マップ' }),
-    ).toBe(true);
+  it('accepts IMPORT_START', () => {
+    expect(isPopupToWorkerMessage({ type: 'IMPORT_START', protocolVersion: 1 })).toBe(true);
   });
 
   it('accepts IMPORT_CANCEL with a jobId', () => {
@@ -80,21 +74,10 @@ describe('isPopupToWorkerMessage', () => {
     ).toBe(true);
   });
 
-  it('accepts PERMISSION_REQUEST_PENDING for step import with a mapName', () => {
-    expect(
-      isPopupToWorkerMessage({
-        type: 'PERMISSION_REQUEST_PENDING',
-        protocolVersion: 1,
-        step: 'import',
-        mapName: 'マップ',
-      }),
-    ).toBe(true);
-  });
-
-  it('rejects PERMISSION_REQUEST_PENDING for step import without a mapName', () => {
+  it('accepts PERMISSION_REQUEST_PENDING for step import', () => {
     expect(
       isPopupToWorkerMessage({ type: 'PERMISSION_REQUEST_PENDING', protocolVersion: 1, step: 'import' }),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it('rejects PERMISSION_REQUEST_PENDING with an unknown step', () => {
@@ -238,5 +221,77 @@ describe('isWorkerToPopupMessage', () => {
 
   it('rejects an unknown type', () => {
     expect(isWorkerToPopupMessage({ type: 'NOT_REAL', protocolVersion: 1 })).toBe(false);
+  });
+});
+
+describe('isWorkerToGoogleMapsMessage', () => {
+  it('accepts GMAPS_ENSURE_LIST with a jobId and listName', () => {
+    expect(
+      isWorkerToGoogleMapsMessage({
+        type: 'GMAPS_ENSURE_LIST',
+        protocolVersion: 1,
+        jobId: 'job-1',
+        listName: '食べログ',
+      }),
+    ).toBe(true);
+  });
+
+  it('rejects GMAPS_ENSURE_LIST without a listName', () => {
+    expect(
+      isWorkerToGoogleMapsMessage({ type: 'GMAPS_ENSURE_LIST', protocolVersion: 1, jobId: 'job-1' }),
+    ).toBe(false);
+  });
+
+  it('rejects GMAPS_ENSURE_LIST without a jobId', () => {
+    expect(
+      isWorkerToGoogleMapsMessage({ type: 'GMAPS_ENSURE_LIST', protocolVersion: 1, listName: '食べログ' }),
+    ).toBe(false);
+  });
+});
+
+describe('isGoogleMapsToWorkerMessage', () => {
+  it('accepts an ok:true result with a created boolean', () => {
+    expect(
+      isGoogleMapsToWorkerMessage({
+        type: 'GMAPS_ENSURE_LIST_RESULT',
+        protocolVersion: 1,
+        jobId: 'job-1',
+        ok: true,
+        created: false,
+      }),
+    ).toBe(true);
+  });
+
+  it('rejects an ok:true result missing created', () => {
+    expect(
+      isGoogleMapsToWorkerMessage({
+        type: 'GMAPS_ENSURE_LIST_RESULT',
+        protocolVersion: 1,
+        jobId: 'job-1',
+        ok: true,
+      }),
+    ).toBe(false);
+  });
+
+  it('accepts an ok:false result with a code', () => {
+    expect(
+      isGoogleMapsToWorkerMessage({
+        type: 'GMAPS_ENSURE_LIST_RESULT',
+        protocolVersion: 1,
+        jobId: 'job-1',
+        ok: false,
+        code: 'GoogleMapsUiChanged',
+      }),
+    ).toBe(true);
+  });
+
+  it('rejects an ok:false result missing a code', () => {
+    expect(
+      isGoogleMapsToWorkerMessage({ type: 'GMAPS_ENSURE_LIST_RESULT', protocolVersion: 1, jobId: 'job-1', ok: false }),
+    ).toBe(false);
+  });
+
+  it('rejects an unknown type', () => {
+    expect(isGoogleMapsToWorkerMessage({ type: 'NOT_REAL', protocolVersion: 1, jobId: 'job-1' })).toBe(false);
   });
 });

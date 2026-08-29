@@ -4,8 +4,6 @@ Reference sequences and state diagrams for popup extract/confirm, including **re
 
 Related: [UI spec](extension-ui-specifications.md), [messaging](extension-messaging-protocol.md), [session schema](extension-session-storage-schema.md), [error codes](extension-error-codes.md).
 
-**2026-08-29: Section 5 (confirm → import start) targets the superseded My Maps flow** — see [ADR-0008](../explanation/adr/0008-google-maps-saved-list-import.md). Sections 1–4 and 6–9 (extract/confirm/cancel/reconnect) are unaffected; Section 5 will be redrawn for the Google Maps saved-list flow once the ADR-0008 spike lands.
-
 ---
 
 ## 1. UI step state machine
@@ -140,7 +138,7 @@ No partial `extractResult` is published.
 
 ---
 
-## 5. Confirm → import start (prelude only)
+## 5. Confirm → import start (ADR-0008: ensure the `食べログ` list exists)
 
 ```mermaid
 sequenceDiagram
@@ -149,21 +147,25 @@ sequenceDiagram
   participant Worker
   participant Session
   participant MapsTab
+  participant CS as GoogleMapsContentScript
 
-  User->>Popup: edit map name
-  Popup->>Worker: MAP_NAME_SET
-  Worker->>Session: mapName
-  User->>Popup: My Maps へインポート
-  Popup->>Worker: PERMISSION_REQUEST_PENDING step=import mapName
+  User->>Popup: 保存リストを準備する
+  Popup->>Worker: PERMISSION_REQUEST_PENDING step=import
   Note over Popup,Worker: awaited — write must land before the dialog can kill the popup
-  Popup->>Popup: browser.permissions.request Maps (Chrome dialog; popup context destroyed if shown)
-  Popup->>Worker: IMPORT_START mapName
+  Popup->>Popup: browser.permissions.request Google Maps (Chrome dialog; popup context destroyed if shown)
+  Popup->>Worker: IMPORT_START
   Worker->>Session: validate extractResult
   Worker->>Session: activeJob import uiStep import_starting
-  Worker->>MapsTab: create_or_focus new map URL
+  Worker->>MapsTab: tabs.create Google Maps home
   Worker->>Popup: IMPORT_PRELUDE_STARTED
-  Note over Worker,MapsTab: DOM automation after spike
+  Worker->>CS: GMAPS_ENSURE_LIST listName=食べログ
+  Note over CS: open menu, open Saved pane, detect or create+rename the list
+  CS->>Worker: GMAPS_ENSURE_LIST_RESULT ok=true created
+  Worker->>Session: uiStep import_succeeded
+  Worker->>Popup: IMPORT_SUCCEEDED
 ```
+
+Not yet covered: adding any extracted shop to the list — see ADR-0008's open items.
 
 ---
 
@@ -189,7 +191,7 @@ sequenceDiagram
 **Bug this fixes**: Chrome's optional-host-permission dialog takes focus and destroys the popup's
 execution context. The popup's `await browser.permissions.request(...)` continuation (sending
 `EXTRACT_START`) never ran once the dialog appeared, so nothing happened until the user pressed
-**抽出する** a second time. Same bug for **My Maps へインポート**. Fix: the worker resumes the step
+**抽出する** a second time. Same bug for **保存リストを準備する**. Fix: the worker resumes the step
 itself from `permissions.onAdded`, since it survives the popup's death. See
 [messaging protocol §7](extension-messaging-protocol.md#7-worker-permission-prompt-resume-permissionsonadded--added-2026-08-04),
 [session schema §5a](extension-session-storage-schema.md#5a-pending-permission-added-2026-08-04).

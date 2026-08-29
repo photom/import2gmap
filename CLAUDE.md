@@ -24,7 +24,7 @@ This document defines the core guidelines and operational instructions for Claud
   - **Canon TDD (`tdd-webextension`)**: Apply prior to coding in the implementation phase for Test Plan maintenance and the Red-Green-Refactor cycle.
   - **DDD Architecture (`ddd-architecture`)**: Apply when designing entities, value objects, use cases, and layer boundaries.
   - **Chrome Extension & WXT Framework (`wxt-webextension` / `typescript-webextension` / `chrome-extension-development`)**: Apply when implementing Manifest V3, WXT framework, TypeScript, service workers, content scripts, and extension UI.
-  - **Google Maps Saved List Import (`google-maps-saved-list-import`)**: Apply when implementing Google Maps native saved-list Web UI automation (list creation, duplicate check, address search, add-to-list). Supersedes `google-my-maps-web-import` (My Maps) per [ADR-0008](docs/explanation/adr/0008-google-maps-saved-list-import.md); the old skill is kept only for historical reference.
+  - **Google Maps Saved List Import (`google-maps-saved-list-import`)**: Apply when implementing Google Maps native saved-list Web UI automation (list creation, duplicate check, address search, add-to-list). Replaces the deleted My Maps import path per [ADR-0008](docs/explanation/adr/0008-google-maps-saved-list-import.md); My Maps code and docs have been removed from this repository.
   - **ADR Documentation (`adr-documentation`)**: Apply when documenting major architectural decisions, technical trade-offs, and design rationales under `docs/explanation/adr/`.
 
 ---

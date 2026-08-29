@@ -47,19 +47,17 @@ describe('buildScreenViewModel', () => {
     });
   });
 
-  it('maps confirm to a summary screen with map name', () => {
+  it('maps confirm to a summary screen', () => {
     const snapshot: UiStateSnapshot = {
       uiStep: 'confirm',
       context: 'saved_list',
       shopCount: 12,
       collectionCount: 3,
-      mapName: '食べログ保存リスト 2026-08-02',
     };
     expect(buildScreenViewModel(snapshot)).toEqual({
       screen: 'confirm',
       shopCount: 12,
       collectionCount: 3,
-      mapName: '食べログ保存リスト 2026-08-02',
     });
   });
 
@@ -69,19 +67,14 @@ describe('buildScreenViewModel', () => {
     });
   });
 
-  it('maps import_succeeded to a success screen with map name', () => {
+  it('maps import_succeeded to a success screen', () => {
     const snapshot: UiStateSnapshot = {
       uiStep: 'import_succeeded',
       context: 'saved_list',
       shopCount: 3,
       collectionCount: 1,
-      mapName: 'マイマップ',
     };
-    expect(buildScreenViewModel(snapshot)).toEqual({
-      screen: 'import_succeeded',
-      shopCount: 3,
-      mapName: 'マイマップ',
-    });
+    expect(buildScreenViewModel(snapshot)).toEqual({ screen: 'import_succeeded' });
   });
 
   it('maps error to an error screen carrying code, message, retry availability, and retryStep', () => {
@@ -103,7 +96,7 @@ describe('buildScreenViewModel', () => {
     const snapshot: UiStateSnapshot = {
       uiStep: 'error',
       context: 'saved_list',
-      error: { code: 'MyMapsUiChanged', message: 'x', retryStep: 'import' },
+      error: { code: 'GoogleMapsUiChanged', message: 'x', retryStep: 'import' },
     };
     const view = buildScreenViewModel(snapshot);
     expect(view.screen === 'error' && view.retryStep).toBe('import');

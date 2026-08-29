@@ -1,8 +1,10 @@
-# Tutorial: Extract a Tabelog Saved List and Import It into Google My Maps
+# Tutorial: Extract a Tabelog Saved List and Prepare Its Google Maps Saved List
 
-**Superseded 2026-08-29 — historical only.** This tutorial describes the My Maps import path, which is superseded by [ADR-0008](../explanation/adr/0008-google-maps-saved-list-import.md) (Google Maps native saved-list import). Steps 1–6 (build/load, open saved list, extract, confirm) still describe the unaffected extraction phase; Step 7 onward (My Maps import) will be rewritten once the ADR-0008 spike lands. Kept for now as the only walkthrough of the extraction half of the flow.
-
-This walks through the full flow end to end: loading the unpacked extension, extracting your Tabelog saved list, confirming the result, and importing it into a brand-new Google My Maps map — with a pin for every shop.
+This walks through the flow end to end: loading the unpacked extension, extracting your Tabelog
+saved list, confirming the result, and ensuring a Google Maps saved list named 「食べログ」 exists
+(created automatically if it doesn't). See [ADR-0008](../explanation/adr/0008-google-maps-saved-list-import.md) for why
+this replaced an earlier My Maps-based design, and its open items for what this step does **not**
+do yet (it does not add any shops to the list — see "Scope decisions" below).
 
 Related: [build how-to](../how-to/build-extension-artifact.md), [UI spec](../reference/extension-ui-specifications.md), [error codes](../reference/extension-error-codes.md), [decision checklist](../explanation/chrome-extension-decision-checklist.md).
 
@@ -57,34 +59,33 @@ Press **次へ** to continue, or **やり直す** to discard this result and sta
 
 ## 6. Confirm
 
-You'll see the final shop count, collection count, and an editable map name (defaults to `食べログ保存リスト YYYY-MM-DD`). Edit the map name here if you want something other than the default — this is the name your My Maps map will get in the next step.
+You'll see the final shop count, collection count, and a note that the extension will check/create a Google Maps saved list named **食べログ** (this name is fixed, not editable).
 
-Press **My Maps へインポート** to continue, or **戻る** to go back.
+Press **保存リストを準備する** to continue, or **戻る** to go back.
 
-## 7. Import into My Maps
+## 7. Prepare the Google Maps saved list
 
-Pressing **My Maps へインポート** kicks off the import:
+Pressing **保存リストを準備する** kicks off the import prelude:
 
-- Chrome asks for permission again, this time for **two** origins: `https://www.google.com/maps/*` (the My Maps web app itself) and `https://docs.google.com/picker*`. The second one is needed because the KML upload dialog My Maps opens is actually a cross-origin `docs.google.com/picker` iframe embedded in the My Maps tab, and Chrome requires host permission for that frame separately from the top-level page. Allow both.
-- The popup shows **権限確認・My Maps タブ準備中です…** while the background script drives a new tab: it opens My Maps, creates a new map, renames it to the map name from the confirm screen, opens the KML import dialog, and feeds it your extracted shops as an in-memory KML file. The KML itself is built in memory and never written to disk, and the extension uses no Drive API and no OAuth tokens to do any of this. That said, the map it creates is stored in your Google account like any other My Maps map, and creating it can surface a one-time Google Drive consent dialog ("Creating a MyMaps map always uploads title, thumbnail, and associated metadata to Drive") — the automation clicks through this dialog on your behalf if it appears, so don't be surprised that it doesn't ask you to confirm it yourself.
-- This step drives Google's own My Maps web UI, which isn't a documented or stable API surface. If Google's page differs from what the automation expects, you'll get an explicit `error` screen (see Troubleshooting below) instead of a silent partial import — the popup never reports success unless the map was actually renamed and the KML was actually accepted.
+- Chrome asks for permission to access `https://www.google.com/maps/*` — allow it.
+- The popup shows **権限確認・Google マップの準備中です…** while the background script drives a new Google Maps tab: it opens the app menu, opens the Saved pane, and checks whether a list named 食べログ already exists. If it doesn't, the extension creates a new list and renames it to 食べログ.
+- This step drives Google's own Maps web UI, which isn't a documented or stable API surface. If Google's page differs from what the automation expects, you'll get an explicit `error` screen (see Troubleshooting below) instead of a silent partial success.
 - On success, the popup shows:
 
-  > 「{マップ名}」に{件数}件の店舗をインポートしました。
+  > Google マップの保存リスト「食べログ」の準備ができました。
 
   with a **完了** button that clears the session and returns you to the `ready` screen.
 
-Switch to the My Maps tab to see your new map, retitled to your chosen map name, with a pin for every extracted shop.
+Switch to the Google Maps tab to see the 食べログ list under your saved places.
 
 ---
 
 ## Scope decisions (not bugs)
 
-A few things are deliberately **not** part of this flow, by product decision rather than by accident (see the [decision checklist](../explanation/chrome-extension-decision-checklist.md) for the full list):
+A few things are deliberately **not** part of this flow yet, by product decision rather than by accident (see [ADR-0008](../explanation/adr/0008-google-maps-saved-list-import.md)'s open items and the [decision checklist](../explanation/chrome-extension-decision-checklist.md) for the full list):
 
-- **Every import creates a brand-new map.** There's no way to import into an existing My Maps map yet.
-- **There's no way to download the KML yourself.** The KML only ever exists in memory during the import.
-- **Pin colors per collection aren't applied.** Collections are extracted and shown as a count on the confirm screen, but styling pins by collection is deferred.
+- **No shop is actually added to the list yet.** This step only ensures the 食べログ list itself exists — checking each extracted shop against the list's contents, searching by address, and adding the resolved place are still unimplemented.
+- **Pin colors / list styling per collection aren't applied.** Collections are extracted and shown as a count on the confirm screen, but any future styling mechanism is undecided post-ADR-0008.
 
 ---
 
@@ -95,10 +96,9 @@ A few things are deliberately **not** part of this flow, by product decision rat
 | 抽出する is disabled / wrong-tab message | Active tab isn't the Tabelog PC saved-list page — switch tabs and reopen the popup |
 | Extract fails with `IncompleteCrawl` | Page count didn't match unique shops collected; try 再試行 |
 | Extract fails with `HostPermissionDenied` | You denied the Tabelog access prompt — 再試行 will ask again |
-| Import fails with `HostPermissionDenied` | You denied the My Maps / picker permission prompt on the confirm screen — 再試行 will ask again |
-| Import fails with `MyMapsTabOpenFailed` | Opening (or focusing) the My Maps tab failed — 再試行 |
-| Import fails with `MyMapsNotReady` | You aren't signed in to Google in this browser profile — the tab lands on a Google sign-in redirect instead of My Maps; sign in and 再試行 |
-| Import fails with `MyMapsUiChanged` | Google's My Maps page differs from what the automation expects (an undocumented UI Google can change at any time); this is a real, explicit failure, not a bug you can work around — 再試行 may succeed if it was transient |
+| Import fails with `HostPermissionDenied` | You denied the Google Maps permission prompt on the confirm screen — 再試行 will ask again |
+| Import fails with `GoogleMapsTabOpenFailed` | Opening the Google Maps tab failed — 再試行 |
+| Import fails with `GoogleMapsUiChanged` | Google's Maps page differs from what the automation expects (an undocumented UI Google can change at any time, and some steps are still unverified against a live Japanese-locale account — see the [spike notes](../explanation/google-maps-saved-list-spike-notes.md)); this is a real, explicit failure, not a bug you can work around — 再試行 may succeed if it was transient |
 | Nothing happens after opening the popup | Check `chrome://extensions` → import2gmap → "Errors" for a background script exception, and confirm you rebuilt/reloaded after any code change |
 
 For the complete, authoritative list of error codes and their retry semantics, see [extension-error-codes.md](../reference/extension-error-codes.md).

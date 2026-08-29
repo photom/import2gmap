@@ -28,19 +28,16 @@ export type PopupToWorkerMessage =
       readonly uiStep: 'confirm' | 'extract_complete';
     }
   | { readonly type: 'EXTRACT_DISCARD'; readonly protocolVersion: ProtocolVersion }
-  | { readonly type: 'MAP_NAME_SET'; readonly protocolVersion: ProtocolVersion; readonly mapName: string }
-  | { readonly type: 'IMPORT_START'; readonly protocolVersion: ProtocolVersion; readonly mapName: string }
+  | { readonly type: 'IMPORT_START'; readonly protocolVersion: ProtocolVersion }
   | { readonly type: 'IMPORT_CANCEL'; readonly protocolVersion: ProtocolVersion; readonly jobId: JobId }
   | { readonly type: 'ERROR_RETRY'; readonly protocolVersion: ProtocolVersion }
   // Sent right before `browser.permissions.request(...)`, and awaited, so the write has landed
   // in session storage before Chrome's permission dialog can close the popup and kill its JS
   // context. See message-router's `routePermissionGranted` / session model's `PendingPermission`.
-  | { readonly type: 'PERMISSION_REQUEST_PENDING'; readonly protocolVersion: ProtocolVersion; readonly step: 'extract' }
   | {
       readonly type: 'PERMISSION_REQUEST_PENDING';
       readonly protocolVersion: ProtocolVersion;
-      readonly step: 'import';
-      readonly mapName: string;
+      readonly step: 'extract' | 'import';
     }
   // Sent when `permissions.request()` resolves `false` (denial) and the popup survived to see it.
   | { readonly type: 'PERMISSION_REQUEST_CANCELLED'; readonly protocolVersion: ProtocolVersion };
@@ -72,14 +69,10 @@ export function isPopupToWorkerMessage(value: unknown): value is PopupToWorkerMe
       return isNonEmptyString(value.jobId);
     case 'UI_STEP_SET':
       return value.uiStep === 'confirm' || value.uiStep === 'extract_complete';
-    case 'MAP_NAME_SET':
-      return typeof value.mapName === 'string';
     case 'IMPORT_START':
-      return typeof value.mapName === 'string';
+      return true;
     case 'PERMISSION_REQUEST_PENDING':
-      if (value.step === 'extract') return true;
-      if (value.step === 'import') return typeof value.mapName === 'string';
-      return false;
+      return value.step === 'extract' || value.step === 'import';
     case 'PERMISSION_REQUEST_CANCELLED':
       return true;
     default:
@@ -161,111 +154,45 @@ export function isContentToWorkerMessage(value: unknown): value is ContentToWork
   }
 }
 
-// The KML upload dialog spans two frames (see messaging protocol §6 and the spike results'
-// "cross-origin picker iframe" finding): MAPS_OPEN_IMPORT_DIALOG runs in the top My Maps frame
-// (it only clicks the import link, which is what makes the picker iframe start loading);
-// MAPS_FEED_KML runs in the picker frame itself (only place the file input exists);
-// MAPS_AWAIT_IMPORT_RESULT runs back in the top frame (only place the success signal exists).
-// The worker is responsible for finding the picker frame's frameId and targeting each message
-// at the correct frame — see `waitForPickerFrame` in entrypoints/background.ts.
-export type WorkerToMapsMessage =
-  | { readonly type: 'MAPS_PREPARE_IMPORT'; readonly protocolVersion: ProtocolVersion; readonly jobId: JobId }
-  | {
-      readonly type: 'MAPS_SET_MAP_TITLE';
-      readonly protocolVersion: ProtocolVersion;
-      readonly jobId: JobId;
-      readonly mapName: string;
-    }
-  | { readonly type: 'MAPS_OPEN_IMPORT_DIALOG'; readonly protocolVersion: ProtocolVersion; readonly jobId: JobId }
-  | {
-      readonly type: 'MAPS_FEED_KML';
-      readonly protocolVersion: ProtocolVersion;
-      readonly jobId: JobId;
-      readonly kml: string;
-      readonly fileName: string;
-    }
-  | { readonly type: 'MAPS_AWAIT_IMPORT_RESULT'; readonly protocolVersion: ProtocolVersion; readonly jobId: JobId };
+// The Google Maps native saved-list flow (ADR-0008) never leaves the top frame or navigates to a
+// new document — unlike the superseded My Maps flow, there is no cross-origin picker iframe and
+// no map-creation navigation to survive, so a single request/reply message pair is enough. See
+// entrypoints/gmaps.content.ts.
+export type WorkerToGoogleMapsMessage = {
+  readonly type: 'GMAPS_ENSURE_LIST';
+  readonly protocolVersion: ProtocolVersion;
+  readonly jobId: JobId;
+  readonly listName: string;
+};
 
-export function isWorkerToMapsMessage(value: unknown): value is WorkerToMapsMessage {
+export function isWorkerToGoogleMapsMessage(value: unknown): value is WorkerToGoogleMapsMessage {
   if (!isRecord(value) || !hasProtocolVersion1(value) || !isNonEmptyString(value.jobId)) {
     return false;
   }
-  switch (value.type) {
-    case 'MAPS_PREPARE_IMPORT':
-    case 'MAPS_OPEN_IMPORT_DIALOG':
-    case 'MAPS_AWAIT_IMPORT_RESULT':
-      return true;
-    case 'MAPS_SET_MAP_TITLE':
-      return isNonEmptyString(value.mapName);
-    case 'MAPS_FEED_KML':
-      return typeof value.kml === 'string' && isNonEmptyString(value.fileName);
-    default:
-      return false;
-  }
+  return value.type === 'GMAPS_ENSURE_LIST' && isNonEmptyString(value.listName);
 }
 
-export type MapsOutcome = { readonly ok: true } | { readonly ok: false; readonly code: string };
+export type GoogleMapsOutcome =
+  | { readonly ok: true; readonly created: boolean }
+  | { readonly ok: false; readonly code: string };
 
-export type MapsToWorkerMessage =
-  | ({
-      readonly type: 'MAPS_PREPARE_RESULT';
-      readonly protocolVersion: ProtocolVersion;
-      readonly jobId: JobId;
-    } & MapsOutcome)
-  | ({
-      readonly type: 'MAPS_SET_MAP_TITLE_RESULT';
-      readonly protocolVersion: ProtocolVersion;
-      readonly jobId: JobId;
-    } & MapsOutcome)
-  | ({
-      readonly type: 'MAPS_OPEN_IMPORT_DIALOG_RESULT';
-      readonly protocolVersion: ProtocolVersion;
-      readonly jobId: JobId;
-    } & MapsOutcome)
-  | ({
-      readonly type: 'MAPS_FEED_KML_RESULT';
-      readonly protocolVersion: ProtocolVersion;
-      readonly jobId: JobId;
-      // Picker-frame step trace, forwarded so entrypoints/background.ts can re-log it to the
-      // service-worker console — a content script's own console.log only ever reaches the picker
-      // frame's own (invisible-to-the-user) console. See docs/reference/extension-error-codes.md
-      // §1's "Logging" rule: step names, jobId, booleans, aria/role strings only, never page HTML.
-      readonly diagnostics?: readonly string[];
-    } & MapsOutcome)
-  | ({
-      readonly type: 'MAPS_IMPORT_RESULT';
-      readonly protocolVersion: ProtocolVersion;
-      readonly jobId: JobId;
-    } & MapsOutcome)
-  | {
-      readonly type: 'MAPS_UI_CHANGED';
-      readonly protocolVersion: ProtocolVersion;
-      readonly jobId: JobId;
-      readonly code: string;
-    };
+export type GoogleMapsToWorkerMessage = {
+  readonly type: 'GMAPS_ENSURE_LIST_RESULT';
+  readonly protocolVersion: ProtocolVersion;
+  readonly jobId: JobId;
+} & GoogleMapsOutcome;
 
-function isMapsOutcome(value: Record<string, unknown>): boolean {
-  if (value.ok === true) return true;
+function isGoogleMapsOutcome(value: Record<string, unknown>): boolean {
+  if (value.ok === true) return typeof value.created === 'boolean';
   if (value.ok === false) return isNonEmptyString(value.code);
   return false;
 }
 
-export function isMapsToWorkerMessage(value: unknown): value is MapsToWorkerMessage {
+export function isGoogleMapsToWorkerMessage(value: unknown): value is GoogleMapsToWorkerMessage {
   if (!isRecord(value) || !hasProtocolVersion1(value) || !isNonEmptyString(value.jobId)) {
     return false;
   }
-  switch (value.type) {
-    case 'MAPS_PREPARE_RESULT':
-    case 'MAPS_SET_MAP_TITLE_RESULT':
-    case 'MAPS_OPEN_IMPORT_DIALOG_RESULT':
-    case 'MAPS_FEED_KML_RESULT':
-    case 'MAPS_IMPORT_RESULT':
-      return isMapsOutcome(value);
-    case 'MAPS_UI_CHANGED':
-      return isNonEmptyString(value.code);
-    default:
-      return false;
-  }
+  return value.type === 'GMAPS_ENSURE_LIST_RESULT' && isGoogleMapsOutcome(value);
 }
 
 export type UiStateSnapshot = {
@@ -275,7 +202,6 @@ export type UiStateSnapshot = {
   readonly progress?: ExtractProgress;
   readonly shopCount?: number;
   readonly collectionCount?: number;
-  readonly mapName?: string;
   readonly error?: ExtensionErrorPayload;
 };
 
