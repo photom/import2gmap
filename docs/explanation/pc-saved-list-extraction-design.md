@@ -14,7 +14,7 @@ Collections decision: [`docs/explanation/adr/0005-extract-collections-for-future
 
 ## Context
 
-ADR-0003 requires content scripts to collect shop identity fields, build KML in memory, and import via My Maps Web UI. ADR-0005 adds **collections** on extract for a later pin-color design. The PC saved-list view exposes:
+ADR-0003 requires content scripts to collect shop identity fields; the downstream consumer of those fields is now Google Maps' native saved-list import ([ADR-0008](adr/0008-google-maps-saved-list-import.md), no KML/My Maps — superseded), not My Maps. ADR-0005 adds **collections** on extract for a later pin-color design; the styling mechanism itself is open again post-ADR-0008. The PC saved-list view exposes:
 
 - Name and URL on a single anchor (`.simple-rvw__rst-name-target`).
 - Street address in a clipboard helper textarea with a stable four-line layout.

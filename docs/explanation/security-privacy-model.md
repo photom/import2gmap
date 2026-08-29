@@ -4,6 +4,8 @@ Explanation of what the Chrome extension is allowed to read, store, and transmit
 
 Normative companions: [ADR-0003](adr/0003-chrome-extension-my-maps-web-import.md), [ADR-0005](adr/0005-extract-collections-for-future-pin-styling.md), [extraction spec](../reference/tabelog-pc-saved-list-extraction-spec.md), [session schema](../reference/extension-session-storage-schema.md), [error codes](../reference/extension-error-codes.md).
 
+**2026-08-29: Section 7 ("My Maps side") and the KML node in Section 2's diagram are superseded by [ADR-0008](adr/0008-google-maps-saved-list-import.md).** The import target is now Google Maps' native saved-list feature (no KML, no My Maps map/layer) — the same privacy posture (Web UI automation only, no cookies/tokens, explicit failure on unexpected DOM) carries over, just applied to the new target. Sections 1–6 and 8–9 (extraction-side reads/forbidden-reads/storage/permissions posture) are unaffected.
+
 ---
 
 ## 1. Goals

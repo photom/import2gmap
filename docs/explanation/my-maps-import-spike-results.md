@@ -1,5 +1,7 @@
 # My Maps Web UI Import — Feasibility Spike Results
 
+**Superseded 2026-08-29 — historical only.** The My Maps import path this spike validated is superseded by [ADR-0008](adr/0008-google-maps-saved-list-import.md), which targets Google Maps' native saved-list feature instead. Nothing below applies to new import-path work; kept for the historical record of how the old (now-defunct) automation was built.
+
 Records the outcome of the [ADR-0004 §6](adr/0004-extension-implementation-baseline.md) My Maps feasibility spike (gate before implementing `mymaps.content.ts` automation). Findings come from manual, logged-in browser reconnaissance (2026-08-02) against the live My Maps Web UI — not from a live-fetched spec, since this UI is undocumented and Google-internal.
 
 **Status**: Spike passed. Proceed to Phase 3 (`mymaps.content.ts`) TDD implementation.

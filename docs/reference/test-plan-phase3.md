@@ -1,5 +1,7 @@
 # Phase 3 Test Plan (Test List) — My Maps Import Automation
 
+**Superseded 2026-08-29 — historical only.** This Test Plan implemented the My Maps import path, now superseded by [ADR-0008](../explanation/adr/0008-google-maps-saved-list-import.md) (Google Maps native saved-list import). A new Phase 3 Test Plan will be written for the new path once its feasibility spike lands, per the Canon TDD process in `CLAUDE.md` §1. Kept for the historical record of how the old (now-defunct) automation was tested.
+
 Phase 3 Test Plan for Canon TDD implementation of the **import2gmap Chrome Extension** My Maps import automation, unblocked by the [ADR-0004 spike](../explanation/my-maps-import-spike-results.md) (passed 2026-08-02).
 
 Related: [ADR-0003](../explanation/adr/0003-chrome-extension-my-maps-web-import.md), [ADR-0004](../explanation/adr/0004-extension-implementation-baseline.md), [spike results](../explanation/my-maps-import-spike-results.md), [messaging protocol §6](extension-messaging-protocol.md), [error codes](extension-error-codes.md), [Phase 1 plan](test-plan-phase1.md), [Phase 2 plan](test-plan-phase2.md).

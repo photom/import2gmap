@@ -20,7 +20,7 @@ This document defines selectors, field mapping, pager traversal, sanitization, a
 - `#js-bookmarks-data` may be read **only** for per-shop `labels` (`id`, `title`). Do **not** read or persist `bookmark_comment*`, reviewer-only URLs, or other blob fields.
 - Do **not** persist phone numbers even when they appear in copy-helper markup.
 - Selector or structure mismatch → **explicit failure**; partial success is not allowed for a crawl that claimed completeness.
-- Collections are extracted now so a **later** My Maps step can color pins per collection; **v1 extraction does not** apply pin colors.
+- Collections are extracted now for a **later** pin/list-styling step; **v1 extraction does not** apply pin colors. The downstream import target is Google Maps' native saved-list feature ([ADR-0008](../explanation/adr/0008-google-maps-saved-list-import.md) — supersedes the My Maps/KML target this spec originally assumed), so any future styling mechanism is open again, not necessarily KML-based.
 
 ---
 
@@ -274,6 +274,8 @@ Apply sanitization to **every** extracted string before domain validation or KML
 - Reject ids containing `<`, `>`, `"`, `'`, or whitespace after stringify/trim.
 
 ### 6.4 KML / XML emission
+
+**Superseded 2026-08-29** — no KML is generated in the [ADR-0008](../explanation/adr/0008-google-maps-saved-list-import.md) import path. Kept for historical reference; the sanitization discipline (escape/CDATA after 6.1–6.2, no unsanitized `innerHTML`) still applies to whatever text is passed to the new saved-list automation.
 
 When embedding into KML (import phase; pin colors **out of scope for extraction-only**):
 

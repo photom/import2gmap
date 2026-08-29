@@ -4,6 +4,8 @@ Stable error `code` values for popup display, messaging, and tests. Japanese `me
 
 Related: [extraction spec](tabelog-pc-saved-list-extraction-spec.md), [UI spec](extension-ui-specifications.md), [messaging](extension-messaging-protocol.md).
 
+**2026-08-29: Section 5's `MyMaps*` codes are superseded by [ADR-0008](../explanation/adr/0008-google-maps-saved-list-import.md)** (Google Maps native saved-list import replaces My Maps). Sections 1–4 (context/permissions, extraction, session/internal) remain in effect; Section 5 will get a successor code set (list-exists/create, duplicate-check, search/resolve, add-to-list) once the ADR-0008 spike lands.
+
 ---
 
 ## 1. Conventions

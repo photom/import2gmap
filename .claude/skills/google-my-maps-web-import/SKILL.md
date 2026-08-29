@@ -5,6 +5,8 @@ description: Automate Google My Maps Web import from a Manifest V3 Chrome extens
 
 # Google My Maps Web Import
 
+**Superseded 2026-08-29** — the import path now targets Google Maps' native saved lists instead of My Maps; see [ADR-0008](../../../docs/explanation/adr/0008-google-maps-saved-list-import.md) and the `google-maps-saved-list-import` skill. Kept for historical reference only; do not use for new import-path work.
+
 - My Maps has no public KML-to-map creation API; automate only the Web UI in the user authenticated Chrome session.
 - Generate KML in memory from name, address, and description (URL-first) only.
 - Never read credentials, cookies, or tokens.

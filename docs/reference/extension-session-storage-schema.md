@@ -4,6 +4,8 @@ Schema for `chrome.storage.session` used between extract, confirm, and import st
 
 Related: [messaging](extension-messaging-protocol.md), [UI spec](extension-ui-specifications.md), [extraction spec](tabelog-pc-saved-list-extraction-spec.md), [ADR-0004](../explanation/adr/0004-extension-implementation-baseline.md).
 
+**2026-08-29: import-side fields below (`mapName`, the `import_*` / `confirm` `uiStep`s as scoped to map naming) reflect the superseded My Maps flow** — see [ADR-0008](../explanation/adr/0008-google-maps-saved-list-import.md). The extraction-side schema (Sections 3–4, `StoredShop`/`StoredExtractResult`) is unaffected; the import-side schema will be redesigned (list name is now fixed to `食べログ`, not user-editable per run; a per-shop skip/added/duplicate outcome replaces the single map-level success) once the ADR-0008 spike lands.
+
 ---
 
 ## 1. Rules

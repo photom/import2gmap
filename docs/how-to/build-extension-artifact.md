@@ -46,7 +46,7 @@ output/chrome-mv3/popup.html
 output/chrome-mv3/background.js
 output/chrome-mv3/chunks/popup-*.js            # bundled React popup
 output/chrome-mv3/content-scripts/tabelog.js   # Tabelog saved-list extraction
-output/chrome-mv3/content-scripts/mymaps.js    # My Maps import automation
+output/chrome-mv3/content-scripts/mymaps.js    # My Maps import automation (superseded — see ADR-0008; this file name/entrypoint will change once the Google Maps saved-list import lands)
 output/chrome-mv3/assets/popup-*.css
 output/chrome-mv3/icon/{16,32,48,96,128}.png
 ```

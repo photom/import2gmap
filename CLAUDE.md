@@ -24,7 +24,7 @@ This document defines the core guidelines and operational instructions for Claud
   - **Canon TDD (`tdd-webextension`)**: Apply prior to coding in the implementation phase for Test Plan maintenance and the Red-Green-Refactor cycle.
   - **DDD Architecture (`ddd-architecture`)**: Apply when designing entities, value objects, use cases, and layer boundaries.
   - **Chrome Extension & WXT Framework (`wxt-webextension` / `typescript-webextension` / `chrome-extension-development`)**: Apply when implementing Manifest V3, WXT framework, TypeScript, service workers, content scripts, and extension UI.
-  - **Google My Maps Web Import (`google-my-maps-web-import`)**: Apply when implementing My Maps Web UI automation (with `gis-kml-conversion`).
+  - **Google Maps Saved List Import (`google-maps-saved-list-import`)**: Apply when implementing Google Maps native saved-list Web UI automation (list creation, duplicate check, address search, add-to-list). Supersedes `google-my-maps-web-import` (My Maps) per [ADR-0008](docs/explanation/adr/0008-google-maps-saved-list-import.md); the old skill is kept only for historical reference.
   - **ADR Documentation (`adr-documentation`)**: Apply when documenting major architectural decisions, technical trade-offs, and design rationales under `docs/explanation/adr/`.
 
 ---
@@ -36,6 +36,7 @@ Agents MUST follow accepted ADRs and the decision checklist:
 - [ADR-0003](docs/explanation/adr/0003-chrome-extension-my-maps-web-import.md) — MV3 extension, extract fields, My Maps Web UI import, privacy, explicit failure.
 - [ADR-0004](docs/explanation/adr/0004-extension-implementation-baseline.md) — permissions/injection, stepped UX, npm+Vite+Vitest, `chrome.storage.session` handoff, My Maps spike gate, extension-only repo.
 - [ADR-0005](docs/explanation/adr/0005-extract-collections-for-future-pin-styling.md) — extract collections/labels now; pin colors deferred.
+- [ADR-0008](docs/explanation/adr/0008-google-maps-saved-list-import.md) — **current import-path decision**: supersedes ADR-0003's My Maps import path with Google Maps native saved-list import (create/reuse a `食べログ` list, duplicate-check each shop, search-by-address, add-or-skip).
 - [Decision checklist](docs/explanation/chrome-extension-decision-checklist.md) — status table for accepted vs deferred items.
 
 Do not reintroduce Android/Gradle app code, Drive API/OAuth token flows, or always-on broad host access unless a new ADR supersedes these decisions.

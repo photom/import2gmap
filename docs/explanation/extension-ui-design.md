@@ -7,6 +7,8 @@ Explain why the extension uses a **popup-only** stepped flow, how extract comple
 Normative UI rules: [`docs/reference/extension-ui-specifications.md`](../reference/extension-ui-specifications.md)  
 Baseline decisions: [`ADR-0004`](adr/0004-extension-implementation-baseline.md)
 
+**2026-08-29: "Import button vs Maps automation" and the My Maps references below are superseded by [ADR-0008](adr/0008-google-maps-saved-list-import.md)** (Google Maps native saved-list import replaces My Maps; there is no user-editable map name any more). The popup-only / explicit-`extract_complete`-step / no-shop-list rationale elsewhere in this doc is unaffected.
+
 ---
 
 ## Context

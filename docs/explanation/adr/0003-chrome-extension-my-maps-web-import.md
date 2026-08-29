@@ -20,3 +20,7 @@ The product imports restaurants into the user's My Maps without a manual file ha
 
 - My Maps UI automation needs a feasibility spike, selector isolation, sanitized fixtures, and Chrome Web Store/target-site policy review.
 - Implementation defaults (permissions, UX steps, toolchain, session storage, spike pass criteria) are recorded in [ADR-0004](0004-extension-implementation-baseline.md).
+
+## 2026-08-29 update: import path superseded
+
+The **import path** decided here (in-memory KML → My Maps Web UI, always a new map) is **superseded by [ADR-0008](0008-google-maps-saved-list-import.md)**, which switches the target to Google Maps' native saved-list feature instead. The **extraction phase** decided here (desktop MV3 extension, content-script field extraction — name/address/URL/collections — explicit-failure policy, no credentials/cookies/OAuth) is unaffected and remains in effect.

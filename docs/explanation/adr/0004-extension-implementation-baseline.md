@@ -27,6 +27,8 @@ ADR-0003 chose a desktop Manifest V3 Chrome extension with TypeScript, PC saved-
 
 ### 1. Permissions & content-script injection
 
+**2026-08-29 update**: the My Maps / picker host permissions below are **superseded by [ADR-0008](0008-google-maps-saved-list-import.md)**, which replaces the My Maps import target with Google Maps' native saved-list feature (narrower permission set, no `docs.google.com/picker*`). Kept here for history; do not re-request these for new work without re-reading ADR-0008.
+
 - **Chosen**: Programmatic injection via `chrome.scripting.executeScript` (no always-on `content_scripts` in manifest for v1).
 - **Permissions**: `storage`, `activeTab`, `scripting`.
 - **Optional hosts** (request when the user starts extract/import): narrow patterns for Tabelog PC site and Google Maps / My Maps Web UI (e.g. `https://tabelog.com/*`, `https://www.google.com/maps/*`). No `cookies`, no `<all_urls>`, no remote code.
@@ -60,6 +62,8 @@ ADR-0003 chose a desktop Manifest V3 Chrome extension with TypeScript, PC saved-
 - Typed message protocol between popup ↔ service worker ↔ content scripts for start / progress / result / error / cancel (see `typescript-webextension`).
 
 ### 6. My Maps feasibility spike — pass criteria (gate before import implementation)
+
+**2026-08-29 update**: this spike and its pass criteria are specific to the now-**superseded** My Maps import path — see [ADR-0008](0008-google-maps-saved-list-import.md), which defines a replacement spike gate for the Google Maps native saved-list import path. Kept here for history.
 
 Spike passes only if all of the following are demonstrated with sanitized fixtures / manual notes:
 

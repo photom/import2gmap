@@ -1,5 +1,7 @@
 # Tutorial: Extract a Tabelog Saved List and Import It into Google My Maps
 
+**Superseded 2026-08-29 — historical only.** This tutorial describes the My Maps import path, which is superseded by [ADR-0008](../explanation/adr/0008-google-maps-saved-list-import.md) (Google Maps native saved-list import). Steps 1–6 (build/load, open saved list, extract, confirm) still describe the unaffected extraction phase; Step 7 onward (My Maps import) will be rewritten once the ADR-0008 spike lands. Kept for now as the only walkthrough of the extraction half of the flow.
+
 This walks through the full flow end to end: loading the unpacked extension, extracting your Tabelog saved list, confirming the result, and importing it into a brand-new Google My Maps map — with a pin for every shop.
 
 Related: [build how-to](../how-to/build-extension-artifact.md), [UI spec](../reference/extension-ui-specifications.md), [error codes](../reference/extension-error-codes.md), [decision checklist](../explanation/chrome-extension-decision-checklist.md).

@@ -7,6 +7,8 @@ Extraction field rules: [tabelog-pc-saved-list-extraction-spec.md](tabelog-pc-sa
 Design rationale: [extension-ui-design.md](../explanation/extension-ui-design.md).  
 Messaging / session / errors / sequences: [messaging](extension-messaging-protocol.md), [session](extension-session-storage-schema.md), [errors](extension-error-codes.md), [sequences](extension-extract-confirm-sequences.md).
 
+**2026-08-29: import-step details below (map naming, `import_succeeded` wording, "My Maps へインポート" button copy, Section 5/3.6b) reflect the superseded My Maps flow** — see [ADR-0008](../explanation/adr/0008-google-maps-saved-list-import.md). Extract/confirm screens (Sections 3.1–3.5) are largely unaffected in shape, though the confirm screen's editable map name goes away (the target list name `食べログ` is fixed, not user-chosen); the import-step screens will be redesigned once the ADR-0008 spike lands.
+
 **v1 entry point**: popup only. Do **not** inject an extract button or toolbar into the Tabelog page.
 
 **Scope of this document**: screens and transitions through the **Import** primary action. My Maps DOM automation after that action is specified elsewhere / gated by the ADR-0004 spike.

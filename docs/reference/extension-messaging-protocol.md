@@ -4,6 +4,8 @@ Typed message contracts between **popup**, **service worker**, and **content scr
 
 Related: [UI spec](extension-ui-specifications.md), [session schema](extension-session-storage-schema.md), [error codes](extension-error-codes.md), [sequences](extension-extract-confirm-sequences.md).
 
+**2026-08-29: Section 6 (My Maps content script protocol) is superseded by [ADR-0008](../explanation/adr/0008-google-maps-saved-list-import.md).** Sections 1–5 and 7–8 (popup/worker/Tabelog protocol) remain in effect; Section 6 will get a successor protocol for the Google Maps saved-list content script once the ADR-0008 spike lands.
+
 ---
 
 ## 1. Transport rules

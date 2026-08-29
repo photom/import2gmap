@@ -4,6 +4,8 @@ Reference sequences and state diagrams for popup extract/confirm, including **re
 
 Related: [UI spec](extension-ui-specifications.md), [messaging](extension-messaging-protocol.md), [session schema](extension-session-storage-schema.md), [error codes](extension-error-codes.md).
 
+**2026-08-29: Section 5 (confirm → import start) targets the superseded My Maps flow** — see [ADR-0008](../explanation/adr/0008-google-maps-saved-list-import.md). Sections 1–4 and 6–9 (extract/confirm/cancel/reconnect) are unaffected; Section 5 will be redrawn for the Google Maps saved-list flow once the ADR-0008 spike lands.
+
 ---
 
 ## 1. UI step state machine

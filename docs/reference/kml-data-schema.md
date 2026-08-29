@@ -1,5 +1,7 @@
 # KML Data Schema
 
+**Superseded 2026-08-29 — historical only.** [ADR-0008](../explanation/adr/0008-google-maps-saved-list-import.md) replaces the My Maps import path with Google Maps native saved-list automation, which builds no KML at all. Kept for historical reference; do not build new work on this schema.
+
 Normative mapping from domain extract results to OGC KML 2.2 for in-memory My Maps import.
 
 Related: [extraction spec](tabelog-pc-saved-list-extraction-spec.md), [gis-kml-conversion skill](../../.cursor/skills/gis-kml-conversion/SKILL.md), [ADR-0005](../explanation/adr/0005-extract-collections-for-future-pin-styling.md) (collections / future styles).

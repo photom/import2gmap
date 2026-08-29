@@ -9,7 +9,7 @@ Inventory of product and engineering decisions for the Manifest V3 + TypeScript 
 | Delivery form | Desktop Chrome Manifest V3 extension, TypeScript → bundled JS | [ADR-0003](adr/0003-chrome-extension-my-maps-web-import.md) |
 | Extract source | PC saved-list DOM only (fixed selectors) | [ADR-0003](adr/0003-chrome-extension-my-maps-web-import.md), [extraction spec](../reference/tabelog-pc-saved-list-extraction-spec.md) |
 | Fields | name, address, URL; optional short description; URL first line of description; **collections** (`id` + `name`, may be empty) | extraction spec, [ADR-0005](adr/0005-extract-collections-for-future-pin-styling.md) |
-| Import path | In-memory KML → My Maps Web UI automation (no Drive API / OAuth tokens) | [ADR-0003](adr/0003-chrome-extension-my-maps-web-import.md) |
+| Import path | **Superseded 2026-08-29**: Google Maps native saved-list automation — ensure `食べログ` list exists, dedupe-check each shop, search-by-address + add or skip (no Drive API / OAuth tokens). ~~In-memory KML → My Maps Web UI, always a new map~~ | [ADR-0008](adr/0008-google-maps-saved-list-import.md) (was [ADR-0003](adr/0003-chrome-extension-my-maps-web-import.md)) |
 | Privacy | User-started only; no credentials, cookies, profile reads; bookmarks JSON allowlists `labels` only | [ADR-0003](adr/0003-chrome-extension-my-maps-web-import.md), [ADR-0005](adr/0005-extract-collections-for-future-pin-styling.md) |
 | Failure | Selector/UI/count mismatch → explicit failure; no fake full success | [ADR-0003](adr/0003-chrome-extension-my-maps-web-import.md) |
 | Permissions & injection | See ADR-0004 | [ADR-0004](adr/0004-extension-implementation-baseline.md) |
@@ -22,18 +22,21 @@ Inventory of product and engineering decisions for the Manifest V3 + TypeScript 
 | KML schema | Placemark + URL-first description; no collection styles in v1 | [kml-data-schema](../reference/kml-data-schema.md) |
 | Privacy model | No cookies/tokens/phones/memos | [security-privacy](security-privacy-model.md) |
 | Test fixtures & plan | Sanitized HTML under `test/fixtures/tabelog/` + Phase 1 (domain) / Phase 2 (entrypoint wiring) Test Plans | [html-fixture-policy](../reference/html-fixture-policy.md), [Phase 1 plan](../reference/test-plan-phase1.md), [Phase 2 plan](../reference/test-plan-phase2.md) |
-| My Maps spike gate | **Passed** (2026-08-02) — selectors, success/failure detection, and policy note recorded. **Addendum same day**: the KML upload dialog is a cross-origin `docs.google.com/picker` iframe (missed in the original pass); worker now sequences messages across two frames and requests one additional narrow permission (`https://docs.google.com/picker*`). **2026-08-04 addendum**: the picker iframe has a second rendered layout ("picker v2", `data-config` containing `.../picker/v2/`) on some accounts, which opens on a source-nav listbox instead of the upload pane, hiding the file input until `アップロード` is clicked; `MAPS_FEED_KML` now detects and clicks that nav option when needed (`isPickerUploadNavLabel`) — no new permission required, still the same `docs.google.com/picker*` iframe | [ADR-0004](adr/0004-extension-implementation-baseline.md), [spike results](my-maps-import-spike-results.md) |
+| My Maps spike gate | **Superseded 2026-08-29** — the My Maps import path itself is superseded by [ADR-0008](adr/0008-google-maps-saved-list-import.md); this spike's findings are historical. Was: **Passed** (2026-08-02) — selectors, success/failure detection, and policy note recorded, plus two picker-layout addenda (cross-origin `docs.google.com/picker` iframe; "picker v2" source-nav layout) | [ADR-0004](adr/0004-extension-implementation-baseline.md), [spike results](my-maps-import-spike-results.md) (historical) |
+| Google Maps saved-list spike gate | **Pending** — required before implementing the ADR-0008 import path: list-exists/create, duplicate-detection, address search + resolve, add-to-list, all with explicit failure on unexpected UI | [ADR-0008](adr/0008-google-maps-saved-list-import.md) |
 
-## Flow (accepted architecture)
+## Flow (accepted architecture, updated per ADR-0008)
 
 ```mermaid
 flowchart LR
   popup[Popup_UI] --> worker[ServiceWorker]
   worker --> tabelog[Tabelog_ContentScript]
-  tabelog --> kml[KML_in_memory]
-  worker --> mymaps[MyMaps_ContentScript]
-  kml --> mymaps
+  tabelog --> shops[ExtractedShops]
+  worker --> gmaps[GoogleMapsSavedList_ContentScript]
+  shops --> gmaps
 ```
+
+Previously (superseded): `tabelog --> kml[KML_in_memory] --> mymaps[MyMaps_ContentScript]`. No KML is built in the new flow — the extracted shop data (name/address/URL) is passed directly to the Google Maps saved-list automation for dedupe-check, search, and add-or-skip.
 
 ## Open / deferred (change only with ADR or explicit product change)
 
@@ -41,9 +44,10 @@ flowchart LR
 | :--- | :--- |
 | Chrome Web Store listing | Deferred; develop via Load unpacked first. Options, prerequisites, and the policy risk that must be reviewed before closing this item are laid out in [distribute-extension](../how-to/distribute-extension.md) |
 | Playwright / browser E2E | Deferred; Vitest + sanitized HTML fixtures first |
-| KML user download | Not in v1 (memory → My Maps only) |
-| Import into existing map | Not in v1 (spike targets **new map** only) |
-| **Pin color per collection** | Deferred; extract `collections` / catalog now ([ADR-0005](adr/0005-extract-collections-for-future-pin-styling.md)) |
+| KML user download | **Moot post-ADR-0008** — no KML is generated in the Google Maps saved-list import path |
+| Import into existing map | **Superseded framing** — there is no "map" in the ADR-0008 flow; the equivalent question is now "import into an existing saved list" (default: yes, reuse/create `食べログ` idempotently — see [ADR-0008](adr/0008-google-maps-saved-list-import.md)) |
+| Saved-list duplicate match rule | **Open** — name+address heuristic vs. a stored per-item identifier; to be settled during the ADR-0008 feasibility spike |
+| **Pin color per collection** | Deferred; extract `collections` / catalog now ([ADR-0005](adr/0005-extract-collections-for-future-pin-styling.md)). Styling mechanism itself is now open again post-ADR-0008 (no KML `<Style>` target any more) |
 | Production telemetry | None; no PII in logs |
 
 When closing an open item, add or amend an ADR and update this table.
