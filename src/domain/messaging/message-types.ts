@@ -172,6 +172,28 @@ export function isWorkerToGoogleMapsMessage(value: unknown): value is WorkerToGo
   return value.type === 'GMAPS_ENSURE_LIST' && isNonEmptyString(value.listName);
 }
 
+// Fire-and-forget: sent immediately as each step happens, not batched until the final reply — see
+// entrypoints/gmaps.content.ts's `logStep`. Added 2026-08-30 after a field report where the final
+// GMAPS_ENSURE_LIST_RESULT reply never reached the worker at all (broken message channel, or the
+// content script's execution context torn down before it could reply), so the batched
+// `diagnostics` field on that reply — the only place step-by-step progress existed before this —
+// was never seen either, even though the individual steps had actually happened. Streaming each
+// line live means the service-worker console shows real progress even when the final reply never
+// arrives.
+export type GoogleMapsDiagnosticMessage = {
+  readonly type: 'GMAPS_DIAGNOSTIC';
+  readonly protocolVersion: ProtocolVersion;
+  readonly jobId: JobId;
+  readonly line: string;
+};
+
+export function isGoogleMapsDiagnosticMessage(value: unknown): value is GoogleMapsDiagnosticMessage {
+  if (!isRecord(value) || !hasProtocolVersion1(value) || !isNonEmptyString(value.jobId)) {
+    return false;
+  }
+  return value.type === 'GMAPS_DIAGNOSTIC' && isNonEmptyString(value.line);
+}
+
 export type GoogleMapsOutcome =
   | { readonly ok: true; readonly created: boolean }
   | { readonly ok: false; readonly code: string };
@@ -180,6 +202,10 @@ export type GoogleMapsToWorkerMessage = {
   readonly type: 'GMAPS_ENSURE_LIST_RESULT';
   readonly protocolVersion: ProtocolVersion;
   readonly jobId: JobId;
+  // Content-script step trace, forwarded so entrypoints/background.ts can re-log it to the
+  // service-worker console — see docs/reference/extension-error-codes.md §1's "Logging" rule:
+  // step names, jobId, booleans, role/jsaction strings only, never page HTML.
+  readonly diagnostics?: readonly string[];
 } & GoogleMapsOutcome;
 
 function isGoogleMapsOutcome(value: Record<string, unknown>): boolean {
@@ -195,6 +221,57 @@ export function isGoogleMapsToWorkerMessage(value: unknown): value is GoogleMaps
   return value.type === 'GMAPS_ENSURE_LIST_RESULT' && isGoogleMapsOutcome(value);
 }
 
+// ADR-0008 step 2 (per-shop search + add) — see entrypoints/gmaps.content.ts's `handleAddShop`.
+// `listName` is passed on every message (not just once) so the content script can always verify
+// it's still on the right list's detail pane before acting, rather than trusting leftover state
+// from a previous message.
+export type WorkerToGoogleMapsAddShopMessage = {
+  readonly type: 'GMAPS_ADD_SHOP';
+  readonly protocolVersion: ProtocolVersion;
+  readonly jobId: JobId;
+  readonly listName: string;
+  readonly shopName: string;
+  readonly shopAddress: string;
+};
+
+export function isWorkerToGoogleMapsAddShopMessage(value: unknown): value is WorkerToGoogleMapsAddShopMessage {
+  if (!isRecord(value) || !hasProtocolVersion1(value) || !isNonEmptyString(value.jobId)) {
+    return false;
+  }
+  return (
+    value.type === 'GMAPS_ADD_SHOP' &&
+    isNonEmptyString(value.listName) &&
+    isNonEmptyString(value.shopName) &&
+    isNonEmptyString(value.shopAddress)
+  );
+}
+
+// `status: 'already_present'` (dedupe skip, per ADR-0008) is distinct from `'added'` so the worker
+// can report accurate added/skipped counts without needing a separate outcome shape.
+export type GoogleMapsAddShopOutcome =
+  | { readonly ok: true; readonly status: 'added' | 'already_present' }
+  | { readonly ok: false; readonly code: string };
+
+export type GoogleMapsAddShopResultMessage = {
+  readonly type: 'GMAPS_ADD_SHOP_RESULT';
+  readonly protocolVersion: ProtocolVersion;
+  readonly jobId: JobId;
+  readonly diagnostics?: readonly string[];
+} & GoogleMapsAddShopOutcome;
+
+function isGoogleMapsAddShopOutcome(value: Record<string, unknown>): boolean {
+  if (value.ok === true) return value.status === 'added' || value.status === 'already_present';
+  if (value.ok === false) return isNonEmptyString(value.code);
+  return false;
+}
+
+export function isGoogleMapsAddShopResultMessage(value: unknown): value is GoogleMapsAddShopResultMessage {
+  if (!isRecord(value) || !hasProtocolVersion1(value) || !isNonEmptyString(value.jobId)) {
+    return false;
+  }
+  return value.type === 'GMAPS_ADD_SHOP_RESULT' && isGoogleMapsAddShopOutcome(value);
+}
+
 export type UiStateSnapshot = {
   readonly uiStep: UiStep;
   readonly context: 'saved_list' | 'tabelog_other' | 'other';
@@ -202,6 +279,10 @@ export type UiStateSnapshot = {
   readonly progress?: ExtractProgress;
   readonly shopCount?: number;
   readonly collectionCount?: number;
+  // ADR-0008 step 2 final tally, present once uiStep is 'import_succeeded'.
+  readonly addedCount?: number;
+  readonly skippedCount?: number;
+  readonly failedCount?: number;
   readonly error?: ExtensionErrorPayload;
 };
 
@@ -224,7 +305,22 @@ export type WorkerToPopupMessage =
   | { readonly type: 'EXTRACT_CANCELLED'; readonly protocolVersion: ProtocolVersion; readonly jobId: JobId }
   | ({ readonly type: 'IMPORT_PRELUDE_FAILED'; readonly protocolVersion: ProtocolVersion } & ExtensionErrorPayload)
   | { readonly type: 'IMPORT_PRELUDE_STARTED'; readonly protocolVersion: ProtocolVersion; readonly jobId: JobId }
-  | { readonly type: 'IMPORT_SUCCEEDED'; readonly protocolVersion: ProtocolVersion; readonly jobId: JobId }
+  // ADR-0008 step 2 (per-shop search + add) progress — counts only, never shop names/addresses.
+  | {
+      readonly type: 'IMPORT_SHOPS_PROGRESS';
+      readonly protocolVersion: ProtocolVersion;
+      readonly jobId: JobId;
+      readonly processed: number;
+      readonly total: number;
+    }
+  | {
+      readonly type: 'IMPORT_SUCCEEDED';
+      readonly protocolVersion: ProtocolVersion;
+      readonly jobId: JobId;
+      readonly addedCount?: number;
+      readonly skippedCount?: number;
+      readonly failedCount?: number;
+    }
   | ({ readonly type: 'IMPORT_FAILED'; readonly protocolVersion: ProtocolVersion } & ExtensionErrorPayload);
 
 const WORKER_TO_POPUP_TYPES = new Set([
@@ -235,6 +331,7 @@ const WORKER_TO_POPUP_TYPES = new Set([
   'EXTRACT_CANCELLED',
   'IMPORT_PRELUDE_FAILED',
   'IMPORT_PRELUDE_STARTED',
+  'IMPORT_SHOPS_PROGRESS',
   'IMPORT_SUCCEEDED',
   'IMPORT_FAILED',
 ]);

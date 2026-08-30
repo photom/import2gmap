@@ -43,6 +43,13 @@ export type StoredExtractResult = {
   readonly sourceTabUrl?: string;
 };
 
+// ADR-0008 step 2 (per-shop search + add) final tally — set once `import_succeeded` is reached.
+export type ImportSummary = {
+  readonly addedCount: number;
+  readonly skippedCount: number;
+  readonly failedCount: number;
+};
+
 export type StoredError = {
   readonly code: string;
   readonly message: string;
@@ -68,4 +75,5 @@ export type SessionRoot = {
   readonly extractResult?: StoredExtractResult;
   readonly lastError?: StoredError;
   readonly pendingPermission?: PendingPermission;
+  readonly importSummary?: ImportSummary;
 };

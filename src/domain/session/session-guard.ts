@@ -34,6 +34,12 @@ function isValidPendingPermission(value: unknown): value is PendingPermission {
   return true;
 }
 
+function isValidImportSummary(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  const { addedCount, skippedCount, failedCount } = value;
+  return typeof addedCount === 'number' && typeof skippedCount === 'number' && typeof failedCount === 'number';
+}
+
 export function validateSessionRoot(raw: unknown): SessionRoot {
   if (!isRecord(raw)) {
     throw new ExtractionError('SessionCorrupt');
@@ -48,6 +54,9 @@ export function validateSessionRoot(raw: unknown): SessionRoot {
     throw new ExtractionError('SessionCorrupt');
   }
   if (raw.pendingPermission !== undefined && !isValidPendingPermission(raw.pendingPermission)) {
+    throw new ExtractionError('SessionCorrupt');
+  }
+  if (raw.importSummary !== undefined && !isValidImportSummary(raw.importSummary)) {
     throw new ExtractionError('SessionCorrupt');
   }
 

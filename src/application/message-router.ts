@@ -68,6 +68,13 @@ function buildSnapshot(state: SessionRoot, tabContext: TabContext): UiStateSnaps
       ...snapshot,
       shopCount: state.extractResult.shopCount,
       collectionCount: state.extractResult.collectionCount,
+      ...(uiStep === 'import_succeeded' && state.importSummary
+        ? {
+            addedCount: state.importSummary.addedCount,
+            skippedCount: state.importSummary.skippedCount,
+            failedCount: state.importSummary.failedCount,
+          }
+        : {}),
     };
   }
   return snapshot;

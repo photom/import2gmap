@@ -31,6 +31,7 @@ type SessionRoot = {
   extractResult?: StoredExtractResult;
   lastError?: StoredError;
   pendingPermission?: PendingPermission;
+  importSummary?: ImportSummary; // ADR-0008 step 2 final tally — see §5b
 };
 
 type UiStep =
@@ -152,6 +153,28 @@ had to press 抽出する / インポート a second time after granting (see
 
 ---
 
+## 5b. Import summary (added 2026-08-30)
+
+```ts
+type ImportSummary = {
+  addedCount: number;
+  skippedCount: number; // already present in the list, matched by exact shop name
+  failedCount: number; // search/add did not confirm — see error-codes §5
+};
+```
+
+- **Written by**: the worker, once `uiStep` reaches `import_succeeded`, after ADR-0008 step 2
+  (`entrypoints/background.ts`'s per-shop `GMAPS_ADD_SHOP` loop) finishes processing every
+  extracted shop.
+- **Read by**: the popup, to show the final added/skipped/failed counts on the `import_succeeded`
+  screen — persisted so a popup reopen after the job finished still shows the same summary, rather
+  than only the live `IMPORT_SUCCEEDED` push (which a closed popup would miss).
+- Live per-shop progress while the loop is running is **not** persisted to the session — only
+  broadcast as `IMPORT_SHOPS_PROGRESS` (see [messaging protocol §7](extension-messaging-protocol.md#7-service-worker--google-maps-content-script--per-shop-search--add-adr-0008-step-2-added-2026-08-30)) for a popup that happens to be open at the time; reopening
+  mid-run shows `import_starting` with no live counter, a known gap (see the decision checklist).
+
+---
+
 ## 6. Last error
 
 ```ts
@@ -177,7 +200,7 @@ Kept so popup reopen on `error` can show the same code/message. Cleared on succe
 | User **次へ** | `confirm` |
 | User **戻る** | `extract_complete` |
 | Import prelude / automation running | `import_starting` |
-| `食べログ` saved list confirmed to exist (created if missing) | `import_succeeded` |
+| `食べログ` list confirmed to exist and every extracted shop processed (added/skipped/failed — see §5b) | `import_succeeded` |
 | Failure | `error` |
 | Discard / cancel to idle | `ready` (or wrong_* on next open) |
 

@@ -218,7 +218,7 @@ avoid making the user press **抽出する** / **保存リストを準備する*
   and awaits the write completing **before** calling `permissions.request()`.
 - The service worker — which survives the popup's death — resumes the step itself from
   `browser.permissions.onAdded` once the grant lands (see
-  [messaging protocol §7](extension-messaging-protocol.md#7-worker-permission-prompt-resume-permissionsonadded--added-2026-08-04)).
+  [messaging protocol §8](extension-messaging-protocol.md#8-worker-permission-prompt-resume-permissionsonadded--added-2026-08-04)).
 - No new screen id is introduced for this. Reopening the popup after granting the permission
   simply lands on the existing `extracting` / `import_starting` screen (Sections 3.3 / 3.6) — the
   same screens already shown when the popup survives the prompt — so the user sees progress or

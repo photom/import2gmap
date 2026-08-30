@@ -193,7 +193,7 @@ execution context. The popup's `await browser.permissions.request(...)` continua
 `EXTRACT_START`) never ran once the dialog appeared, so nothing happened until the user pressed
 **抽出する** a second time. Same bug for **保存リストを準備する**. Fix: the worker resumes the step
 itself from `permissions.onAdded`, since it survives the popup's death. See
-[messaging protocol §7](extension-messaging-protocol.md#7-worker-permission-prompt-resume-permissionsonadded--added-2026-08-04),
+[messaging protocol §8](extension-messaging-protocol.md#8-worker-permission-prompt-resume-permissionsonadded--added-2026-08-04),
 [session schema §5a](extension-session-storage-schema.md#5a-pending-permission-added-2026-08-04).
 
 ```mermaid

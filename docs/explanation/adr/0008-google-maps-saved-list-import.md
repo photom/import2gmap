@@ -84,3 +84,27 @@ detection against a list's actual contents, address search + single-result resol
 a resolved place to the list. The popup's import step currently only exercises step 1 above; it
 does not yet add any shops to the list. Every downstream reference doc listed as stale above has
 now been rewritten to match this partial implementation (see the decision checklist).
+
+## 2026-08-30 update: step 2 (per-shop search + add) implemented
+
+Real DOM captures of the list's own detail pane (opened by clicking its row) allowed implementing
+**step 2 of this ADR's flow** end to end: dedupe-check each extracted shop by exact name match
+against the list's existing place cards; if absent, open the list's "Add a place" search box,
+search `"{name} {address}"`, click the top suggestion, and confirm it was added. New pure modules
+(`src/domain/google-maps/add-place-search.ts`, unit-tested against sanitized synthetic fixtures)
+and `entrypoints/gmaps.content.ts`'s `handleAddShop`; `entrypoints/background.ts`'s
+`runEnsureListJob` now loops one `GMAPS_ADD_SHOP` message per shop after the list is confirmed
+ready, tallying added/skipped/failed counts (`ImportSummary`, persisted to the session and shown
+on the popup's completion screen) — a per-shop failure is tallied, not a job-aborting failure, per
+this ADR's original "skip, don't guess" decision. See the (sanitized) [spike notes §5](google-maps-saved-list-spike-notes.md)
+for the DOM shape. **Confirmed working live the same day** against a real account: a batch of 42
+extracted shops was processed, correctly adding new ones and skipping an already-present one by
+exact name match, with the pane-reuse and search-box-reopen optimizations both engaging correctly
+across shops. Still open: no-match/ambiguous search results were never captured (so "always take
+the top suggestion" is unvalidated; a zero-result search is currently accepted as a bounded-timeout
+skip rather than a dedicated explicit code), and the "added" confirmation, while it worked, races
+two signals rather than one (see spike notes §5's 2026-08-30 live-run note) since a single-signal
+check felt slow to the user in practice.
+
+With this, both steps of this ADR's decision are implemented **and** live-confirmed for the core
+path; the decision checklist tracks the remaining edge-case gaps.

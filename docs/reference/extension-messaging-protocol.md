@@ -170,15 +170,35 @@ Selectors and DOM shape come from the (sanitized) [spike notes](../explanation/g
 | Direction | `type` | Fields | Meaning |
 | :--- | :--- | :--- | :--- |
 | Worker → Maps | `GMAPS_ENSURE_LIST` | `{ protocolVersion, jobId, listName: string }` — open the app menu, open the Saved pane, check whether a list named `listName` exists; if not, create one via **New list** and rename it. `listName` is always `TARGET_SAVED_LIST_NAME` (`食べログ`, `src/domain/google-maps/constants.ts`) in practice, but is passed explicitly rather than hardcoded in the content script | top (only frame involved) |
-| Maps → Worker | `GMAPS_ENSURE_LIST_RESULT` | `{ ok: true, created: boolean }` (list already existed vs. was just created), or `{ ok: false, code }` (`GoogleMapsUiChanged` for any missing selector or bounded timeout at any step) | top |
+| Maps → Worker | `GMAPS_ENSURE_LIST_RESULT` | `{ ok: true, created: boolean }` (list already existed vs. was just created), or `{ ok: false, code }` (`GoogleMapsUiChanged` for any missing selector or bounded timeout at any step); either way carries an optional `diagnostics: string[]` step trace, re-logged by the worker to the service-worker console — a redundant backup for the normal case; see `GMAPS_DIAGNOSTIC` below for the primary mechanism | top |
+| Maps → Worker | `GMAPS_DIAGNOSTIC` | `{ protocolVersion, jobId, line: string }` — **added 2026-08-30**, fire-and-forget (no reply expected). Sent immediately as each step happens (`entrypoints/gmaps.content.ts`'s `logStep`), independent of `GMAPS_ENSURE_LIST_RESULT`, and re-logged to the service-worker console the instant it arrives. Exists because a field report showed the final result reply never reaching the worker at all — the batched `diagnostics` field above (the only progress visibility that existed before this) is attached only to that reply, so it never showed anything either, even though the individual steps had actually run | top |
 
-Every missing selector or timeout is an **explicit failure** (`GoogleMapsUiChanged`) — never a silent success (ADR-0003's policy, carried over to this target). The final step re-parses the saved-lists pane and confirms the target list is actually present before replying `ok: true` — never assumed from the click sequence alone.
+Every missing selector or timeout is an **explicit failure** (`GoogleMapsUiChanged`) — never a silent success (ADR-0003's policy, carried over to this target). When creating a new list, `GMAPS_ENSURE_LIST_RESULT`'s `ok: true` reflects that the DOM write itself verifiably succeeded (see spike notes §4) — **not** a re-read of this tab's own saved-lists pane, which is field-confirmed to stay stale (showing the old placeholder name) until a full page reload; see "Reload-based verification" below for where that check actually happens. For the "list already existed" path (`created: false`), `ok: true` still means a normal, non-stale read of the pane found it.
 
-**Not yet covered by this protocol** (see the decision checklist / ADR-0008 open items): per-shop duplicate detection against a list's contents, address search, and adding a resolved place to the list. `GMAPS_ENSURE_LIST` only implements "ensure the list itself exists."
+**Delivery resilience (added 2026-08-30)**: `entrypoints/background.ts`'s `sendEnsureListWithRetry` races each send against a hard per-attempt timeout and retries once (re-injecting first) on no reply at all — `browser.tabs.sendMessage` can otherwise hang indefinitely with no error if the tab's top frame navigated again between injection and send (e.g. the bare `/maps` URL's client redirect), tearing down the listener. `waitForUrlToSettle` (best-effort, never blocks the job) waits for the tab's URL to stop changing before the first injection to reduce how often that race is even hit. See the [spike notes](../explanation/google-maps-saved-list-spike-notes.md) §1 field report this responds to.
+
+**Reload-based verification (added 2026-08-30)**: when `GMAPS_ENSURE_LIST_RESULT` comes back with `created: true`, `runEnsureListJob` reloads the Google Maps tab, waits for it to settle, re-injects the content script, and sends **a second `GMAPS_ENSURE_LIST`** for the same `listName` — on the freshly reloaded page, `hasListNamed` reads genuinely fresh data instead of the originating tab's stale in-memory state. Only this second round's result determines overall success; a failure here (including no reply) is the job's real explicit failure. See the spike notes §4 field report this responds to (waiting longer, and even a real/synthetic window resize, did not fix the staleness — only a reload did).
+
+`GMAPS_ENSURE_LIST` only implements "ensure the list itself exists" — per-shop duplicate detection, search, and add are a separate message pair, §7 below.
 
 ---
 
-## 7. Worker permission-prompt resume (`permissions.onAdded`) — added 2026-08-04
+## 7. Service worker ↔ Google Maps content script — per-shop search + add (ADR-0008 step 2, added 2026-08-30)
+
+Selectors and DOM shape come from the (sanitized) [spike notes §5](../explanation/google-maps-saved-list-spike-notes.md). Sent once per shop, after `GMAPS_ENSURE_LIST` has confirmed the target list exists.
+
+| Direction | `type` | Fields | Meaning |
+| :--- | :--- | :--- | :--- |
+| Worker → Maps | `GMAPS_ADD_SHOP` | `{ protocolVersion, jobId, listName, shopName, shopAddress }` — open (or reuse, if already open) the named list's own detail pane; if a place with `shopName` is already in it, skip; otherwise open the "Add a place" search box, search `"{shopName} {shopAddress}"`, and click the top suggestion | top |
+| Maps → Worker | `GMAPS_ADD_SHOP_RESULT` | `{ ok: true, status: 'added' \| 'already_present' }`, or `{ ok: false, code }` (`GoogleMapsUiChanged` for any missing selector, no search results, or an add that never confirmed); carries the same `diagnostics: string[]` live-streamed-plus-batched pattern as `GMAPS_ENSURE_LIST_RESULT` | top |
+
+`entrypoints/background.ts`'s `runEnsureListJob` sends one `GMAPS_ADD_SHOP` per extracted shop in sequence via `sendAddShopWithRetry` (same per-attempt-timeout-plus-one-retry shape as `sendEnsureListWithRetry`), tallying `added`/`already_present` (`skipped`)/failed counts. **A per-shop failure does not abort the job** — per ADR-0008's "skip, don't guess" policy, it's tallied into `failedCount` and the loop continues to the next shop; only a structural failure earlier (the list itself unreachable) fails the whole job. After every shop, the worker broadcasts `IMPORT_SHOPS_PROGRESS` (`{ jobId, processed, total }` — counts only, never shop names) to the popup, and the final `IMPORT_SUCCEEDED` carries `addedCount`/`skippedCount`/`failedCount`, persisted to the session as `importSummary` (see [session schema](extension-session-storage-schema.md)) so a popup reopen still shows the same summary.
+
+Unlike `GMAPS_ENSURE_LIST`'s freshly-created-list case, no reload-and-reverify step follows a successful add — reloading per shop would be impractical for a list of any size. The `added`/`already_present` confirmation is a direct, live re-check of the pane; it has not been proven immune to the same kind of tab-local display staleness the list-rename step hit (see spike notes §5's open follow-up).
+
+---
+
+## 8. Worker permission-prompt resume (`permissions.onAdded`) — added 2026-08-04
 
 Root cause this section fixes: Chrome's optional-host-permission confirmation dialog takes focus
 and **destroys the popup's execution context**. `handleExtractStart` / `handleImportStart` in
@@ -226,7 +246,7 @@ Net effect for the user: reopening the popup after granting the permission lands
 
 ---
 
-## 8. Forbidden
+## 9. Forbidden
 
 - Untyped payloads or stringly `action` without `type` union
 - Popup → content direct messages (v1)

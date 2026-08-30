@@ -5,7 +5,7 @@ import {
   isListMetaLine,
   isMenuButton,
   isNewListButton,
-  isSavedMenuItem,
+  isSavedTrigger,
   isUntitledListPlaceholder,
 } from '../../../src/domain/google-maps/google-maps-detectors';
 
@@ -17,8 +17,13 @@ function parseElement(html: string): Element {
 }
 
 describe('isMenuButton', () => {
-  it('matches via the jsaction handler regardless of label text', () => {
+  it('matches via the compact-layout jsaction handler regardless of label text', () => {
     const el = parseElement('<button jsaction="settings.open" aria-label="something else"></button>');
+    expect(isMenuButton(el)).toBe(true);
+  });
+
+  it('matches via the wide "navigation rail" layout jsaction handler', () => {
+    const el = parseElement('<button jsaction="navigationrail.more" aria-label="Menu"></button>');
     expect(isMenuButton(el)).toBe(true);
   });
 
@@ -38,19 +43,26 @@ describe('isMenuButton', () => {
   });
 });
 
-describe('isSavedMenuItem', () => {
-  it('matches via the jsaction handler', () => {
+describe('isSavedTrigger', () => {
+  it('matches via the compact-layout (menu item) jsaction handler', () => {
     const el = parseElement('<button jsaction="settings.yourplaces"><label>anything</label></button>');
-    expect(isSavedMenuItem(el)).toBe(true);
+    expect(isSavedTrigger(el)).toBe(true);
+  });
+
+  it('matches via the wide "navigation rail" layout jsaction handler, directly visible without opening a menu', () => {
+    const el = parseElement(
+      '<button jsaction="navigationrail.saved"><div><div>Saved</div></div></button>',
+    );
+    expect(isSavedTrigger(el)).toBe(true);
   });
 
   it('matches English or Japanese text as a fallback', () => {
-    expect(isSavedMenuItem(parseElement('<button><label>Saved</label></button>'))).toBe(true);
-    expect(isSavedMenuItem(parseElement('<button><label>保存済み</label></button>'))).toBe(true);
+    expect(isSavedTrigger(parseElement('<button><label>Saved</label></button>'))).toBe(true);
+    expect(isSavedTrigger(parseElement('<button><label>保存済み</label></button>'))).toBe(true);
   });
 
   it('rejects an unrelated menu item', () => {
-    expect(isSavedMenuItem(parseElement('<button><label>Your contributions</label></button>'))).toBe(false);
+    expect(isSavedTrigger(parseElement('<button><label>Your contributions</label></button>'))).toBe(false);
   });
 });
 

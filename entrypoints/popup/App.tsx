@@ -182,6 +182,12 @@ export default function App() {
       {view.screen === 'import_succeeded' && (
         <section>
           <p>Google マップの保存リスト「食べログ」の準備ができました。</p>
+          {typeof view.addedCount === 'number' && (
+            <p>
+              追加 {view.addedCount} 件 / 既存のためスキップ {view.skippedCount ?? 0} 件 / 失敗{' '}
+              {view.failedCount ?? 0} 件
+            </p>
+          )}
           <button onClick={() => void sendAndRefresh({ type: 'EXTRACT_DISCARD', protocolVersion: 1 })}>
             完了
           </button>

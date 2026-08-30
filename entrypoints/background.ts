@@ -2,9 +2,10 @@ import { SessionStorageManager } from '@/src/infrastructure/storage/session-stor
 import { detectTabContext } from '@/src/application/tab-context-detector';
 import { route, routePermissionGranted } from '@/src/application/message-router';
 import type { RouteDeps, RouteResult } from '@/src/application/message-router';
-import { isPopupToWorkerMessage } from '@/src/domain/messaging/message-types';
+import { isGoogleMapsDiagnosticMessage, isPopupToWorkerMessage } from '@/src/domain/messaging/message-types';
 import type {
   ContentToWorkerMessage,
+  GoogleMapsAddShopResultMessage,
   GoogleMapsToWorkerMessage,
   JobId,
   PopupToWorkerMessage,
@@ -26,6 +27,19 @@ const NAVIGATION_POLL_INTERVAL_MS = 300;
 // since each successful step strictly decreases the remaining distance to page 1.
 const MAX_RETURN_TO_FIRST_PAGE_STEPS = 50;
 const GOOGLE_MAPS_HOME_URL = 'https://www.google.com/maps';
+// The bare /maps URL commonly client-redirects to a location-specific URL (e.g. /maps/@lat,lng,z)
+// shortly after "load" — if that redirect is a real navigation, it tears down whatever was just
+// injected. Best-effort (never fails the job): wait for the tab's URL to stop changing for
+// GMAPS_URL_QUIET_MS before injecting, bounded by GMAPS_URL_SETTLE_TIMEOUT_MS.
+const GMAPS_URL_SETTLE_TIMEOUT_MS = 5_000;
+const GMAPS_URL_QUIET_MS = 800;
+// Generous upper bound on entrypoints/gmaps.content.ts's own worst-case internal wait budget
+// (every step's bounded poll summed) — a wrapper-level timeout this far out essentially only ever
+// fires when the message never reached a live listener at all (e.g. the tab navigated again after
+// injection, tearing the listener down), not from legitimate UI slowness. One retry (re-inject +
+// resend) covers exactly that case.
+const GMAPS_ATTEMPT_TIMEOUT_MS = 120_000;
+const GMAPS_MAX_ATTEMPTS = 2;
 
 // Diagnostic-only: a single greppable prefix for every step-trace line this file emits, so the
 // field can be debugged from the service-worker console alone. Never pass page HTML, shop data,
@@ -45,6 +59,17 @@ export default defineBackground(() => {
     }
     void handlePopupMessage(rawMessage, sendResponse);
     return true;
+  });
+
+  // Streamed live from entrypoints/gmaps.content.ts's `logStep`, independent of whether the final
+  // GMAPS_ENSURE_LIST_RESULT reply ever arrives — see that file's comment. Fire-and-forget: no
+  // sendResponse, no `return true`.
+  browser.runtime.onMessage.addListener((rawMessage) => {
+    if (!isGoogleMapsDiagnosticMessage(rawMessage)) {
+      return undefined;
+    }
+    console.log(rawMessage.line);
+    return undefined;
   });
 
   // Chrome's optional-host-permission confirmation dialog takes focus and destroys the popup's
@@ -313,13 +338,94 @@ export default defineBackground(() => {
     broadcastToPopup({ type: 'IMPORT_FAILED', protocolVersion: 1, jobId, ...error });
   }
 
+  // Best-effort only — never throws, never fails the job. See GMAPS_URL_SETTLE_TIMEOUT_MS comment:
+  // the bare /maps URL can still be mid-redirect right after `waitForTabLoaded` resolves.
+  async function waitForUrlToSettle(tabId: number): Promise<void> {
+    const deadline = Date.now() + GMAPS_URL_SETTLE_TIMEOUT_MS;
+    let lastUrl: string | undefined;
+    let stableSince = Date.now();
+    for (;;) {
+      const tab = await browser.tabs.get(tabId).catch(() => undefined);
+      if (tab?.url !== lastUrl) {
+        lastUrl = tab?.url;
+        stableSince = Date.now();
+      }
+      if (Date.now() - stableSince >= GMAPS_URL_QUIET_MS) return;
+      if (Date.now() > deadline) return;
+      await new Promise((resolve) => setTimeout(resolve, NAVIGATION_POLL_INTERVAL_MS));
+    }
+  }
+
+  // Races one GMAPS_ENSURE_LIST send against a hard timeout, and swallows a rejection (e.g. "no
+  // receiving end") into `undefined` too — both cases mean "no reply", the single signal the
+  // retry loop below acts on. tabs.sendMessage can otherwise hang indefinitely with zero
+  // diagnostic output if the target frame's listener died between injection and send (e.g. a
+  // navigation tore it down) — this bounds that.
+  async function sendGmapsMessageOnce<T>(tabId: number, message: unknown, timeoutMs: number): Promise<T | undefined> {
+    const sendPromise = (async (): Promise<T | undefined> => {
+      try {
+        return (await browser.tabs.sendMessage(tabId, message)) as T | undefined;
+      } catch {
+        return undefined;
+      }
+    })();
+    return Promise.race([
+      sendPromise,
+      new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), timeoutMs)),
+    ]);
+  }
+
+  async function sendEnsureListWithRetry(
+    tabId: number,
+    jobId: JobId,
+    listName: string,
+  ): Promise<GoogleMapsToWorkerMessage | undefined> {
+    const message = { type: 'GMAPS_ENSURE_LIST', protocolVersion: 1, jobId, listName };
+    for (let attempt = 1; attempt <= GMAPS_MAX_ATTEMPTS; attempt++) {
+      if (attempt > 1) {
+        logStep(jobId, 'GMAPS_ENSURE_LIST:retry', `attempt=${attempt}`);
+        await ensureContentScript(tabId, GMAPS_CONTENT_SCRIPT);
+      }
+      logStep(jobId, 'GMAPS_ENSURE_LIST:send', `attempt=${attempt}`);
+      const reply = await sendGmapsMessageOnce<GoogleMapsToWorkerMessage>(tabId, message, GMAPS_ATTEMPT_TIMEOUT_MS);
+      if (reply) return reply;
+      logStep(jobId, 'GMAPS_ENSURE_LIST:no_reply', `attempt=${attempt}`);
+    }
+    return undefined;
+  }
+
+  // ADR-0008 step 2 (per-shop search + add). Same retry shape as sendEnsureListWithRetry, for the
+  // same reason (a torn-down listener otherwise hangs tabs.sendMessage indefinitely).
+  async function sendAddShopWithRetry(
+    tabId: number,
+    jobId: JobId,
+    listName: string,
+    shopName: string,
+    shopAddress: string,
+  ): Promise<GoogleMapsAddShopResultMessage | undefined> {
+    const message = { type: 'GMAPS_ADD_SHOP', protocolVersion: 1, jobId, listName, shopName, shopAddress };
+    for (let attempt = 1; attempt <= GMAPS_MAX_ATTEMPTS; attempt++) {
+      if (attempt > 1) {
+        logStep(jobId, 'GMAPS_ADD_SHOP:retry', `attempt=${attempt}`);
+        await ensureContentScript(tabId, GMAPS_CONTENT_SCRIPT);
+      }
+      const reply = await sendGmapsMessageOnce<GoogleMapsAddShopResultMessage>(
+        tabId,
+        message,
+        GMAPS_ATTEMPT_TIMEOUT_MS,
+      );
+      if (reply) return reply;
+      logStep(jobId, 'GMAPS_ADD_SHOP:no_reply', `attempt=${attempt}`);
+    }
+    return undefined;
+  }
+
   // The Google Maps saved-list flow (ADR-0008) never leaves the top frame and never navigates to
-  // a new document — opening the menu, opening the Saved pane, and creating/renaming a list are
-  // all in-place SPA mutations — so, unlike the superseded My Maps flow, there is no frame
-  // targeting, no re-injection after navigation, and no multi-message sequencing here: one
-  // GMAPS_ENSURE_LIST message gets exactly one reply from entrypoints/gmaps.content.ts once it
-  // has either confirmed the 食べログ list exists (creating it first if needed) or failed
-  // explicitly.
+  // a new document once its content script is actually running — opening the menu, opening the
+  // Saved pane, and creating/renaming a list are all in-place SPA mutations — so, unlike the
+  // superseded My Maps flow, there is no frame targeting and no multi-message sequencing here.
+  // The one navigation risk is the initial /maps -> /maps/@lat,lng,z redirect racing the first
+  // injection, handled by waitForUrlToSettle + sendEnsureListWithRetry's re-inject-and-resend.
   async function runEnsureListJob(jobId: JobId): Promise<void> {
     logStep(jobId, 'runEnsureListJob:start');
     try {
@@ -340,18 +446,21 @@ export default defineBackground(() => {
       broadcastToPopup({ type: 'IMPORT_PRELUDE_STARTED', protocolVersion: 1, jobId });
 
       await waitForTabLoaded(tabId);
+      await waitForUrlToSettle(tabId);
       await ensureContentScript(tabId, GMAPS_CONTENT_SCRIPT);
 
-      logStep(jobId, 'GMAPS_ENSURE_LIST:send');
-      const result = (await browser.tabs.sendMessage(tabId, {
-        type: 'GMAPS_ENSURE_LIST',
-        protocolVersion: 1,
-        jobId,
-        listName: TARGET_SAVED_LIST_NAME,
-      })) as GoogleMapsToWorkerMessage | undefined;
+      const result = await sendEnsureListWithRetry(tabId, jobId, TARGET_SAVED_LIST_NAME);
+
+      // Re-log the content script's own step trace here — its console.log only reaches the page's
+      // own DevTools console, which isn't always what gets checked when debugging a field report.
+      if (result?.diagnostics) {
+        for (const line of result.diagnostics) {
+          console.log(line);
+        }
+      }
 
       if (!result || result.type !== 'GMAPS_ENSURE_LIST_RESULT') {
-        await failImport(jobId, 'InternalError');
+        await failImport(jobId, 'GoogleMapsUiChanged');
         return;
       }
       if (!result.ok) {
@@ -360,8 +469,87 @@ export default defineBackground(() => {
       }
       logStep(jobId, 'GMAPS_ENSURE_LIST:ok', `created=${result.created}`);
 
-      await sessionManager.patch({ uiStep: 'import_succeeded', activeJob: undefined, lastError: undefined });
-      broadcastToPopup({ type: 'IMPORT_SUCCEEDED', protocolVersion: 1, jobId });
+      // 2026-08-30, field-confirmed: right after creating+renaming a list, this tab's own
+      // saved-lists pane does NOT reliably show the new name — not immediately, not after
+      // waiting, not after a real or synthetic window resize; only reloading the page did (see
+      // gmaps.content.ts's file header and the spike notes' §4 debugging history). A freshly
+      // created list is the only case that needs this: an already-existing list (`created: false`)
+      // was already confirmed present by a normal, non-stale read of the pane.
+      if (result.created) {
+        logStep(jobId, 'reload_verify:start');
+        await browser.tabs.reload(tabId);
+        await waitForTabLoaded(tabId);
+        await waitForUrlToSettle(tabId);
+        await ensureContentScript(tabId, GMAPS_CONTENT_SCRIPT);
+
+        const reloadResult = await sendEnsureListWithRetry(tabId, jobId, TARGET_SAVED_LIST_NAME);
+        if (reloadResult?.diagnostics) {
+          for (const line of reloadResult.diagnostics) {
+            console.log(line);
+          }
+        }
+        if (!reloadResult || reloadResult.type !== 'GMAPS_ENSURE_LIST_RESULT' || !reloadResult.ok) {
+          logStep(jobId, 'reload_verify:failed');
+          await failImport(
+            jobId,
+            reloadResult?.type === 'GMAPS_ENSURE_LIST_RESULT' && !reloadResult.ok
+              ? reloadResult.code
+              : 'GoogleMapsUiChanged',
+          );
+          return;
+        }
+        logStep(jobId, 'reload_verify:ok');
+      }
+
+      // ADR-0008 step 2: search + add each extracted shop. A per-shop failure (no search match,
+      // an add that never confirmed, etc.) is tallied and reported in the final summary — it does
+      // NOT abort the whole job, per ADR-0008's "skip that shop... never a guess" policy; only a
+      // structural failure earlier (list itself unreachable) does that.
+      const shops = session.extractResult.shops;
+      logStep(jobId, 'add_shops:start', `total=${shops.length}`);
+      let addedCount = 0;
+      let skippedCount = 0;
+      let failedCount = 0;
+      for (let i = 0; i < shops.length; i++) {
+        const shop = shops[i];
+        const shopResult = await sendAddShopWithRetry(tabId, jobId, TARGET_SAVED_LIST_NAME, shop.name, shop.address);
+        if (shopResult?.diagnostics) {
+          for (const line of shopResult.diagnostics) {
+            console.log(line);
+          }
+        }
+        if (shopResult?.type === 'GMAPS_ADD_SHOP_RESULT' && shopResult.ok) {
+          if (shopResult.status === 'added') addedCount++;
+          else skippedCount++;
+        } else {
+          failedCount++;
+          const code = shopResult?.type === 'GMAPS_ADD_SHOP_RESULT' && !shopResult.ok ? shopResult.code : 'no_reply';
+          logStep(jobId, 'add_shop:failed', `index=${i} code=${code}`);
+        }
+        broadcastToPopup({
+          type: 'IMPORT_SHOPS_PROGRESS',
+          protocolVersion: 1,
+          jobId,
+          processed: i + 1,
+          total: shops.length,
+        });
+      }
+      logStep(jobId, 'add_shops:done', `added=${addedCount} skipped=${skippedCount} failed=${failedCount}`);
+
+      await sessionManager.patch({
+        uiStep: 'import_succeeded',
+        activeJob: undefined,
+        lastError: undefined,
+        importSummary: { addedCount, skippedCount, failedCount },
+      });
+      broadcastToPopup({
+        type: 'IMPORT_SUCCEEDED',
+        protocolVersion: 1,
+        jobId,
+        addedCount,
+        skippedCount,
+        failedCount,
+      });
       logStep(jobId, 'runEnsureListJob:succeeded');
     } catch {
       logStep(jobId, 'runEnsureListJob:exception');

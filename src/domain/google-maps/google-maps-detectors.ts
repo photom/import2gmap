@@ -15,50 +15,34 @@
 //      translations of the captured English UI, NOT independently verified against a live
 //      Japanese-locale session — see the spike notes doc.
 
-function jsactionHandlers(el: Element): string[] {
-  const raw = el.getAttribute('jsaction');
-  if (!raw) return [];
-  return raw
-    .split(';')
-    .map((token) => token.trim())
-    .filter((token) => token.length > 0)
-    .map((token) => {
-      const colonIndex = token.lastIndexOf(':');
-      return colonIndex === -1 ? token : token.slice(colonIndex + 1);
-    });
-}
+import { hasJsactionHandler, hasJsactionHandlerEndingWith, matchesAnyText, normalizedText } from './dom-helpers';
 
-function hasJsactionHandler(el: Element, exact: string): boolean {
-  return jsactionHandlers(el).includes(exact);
-}
-
-function hasJsactionHandlerEndingWith(el: Element, suffix: string): boolean {
-  return jsactionHandlers(el).some((handler) => handler.endsWith(suffix));
-}
-
-function normalizedText(value: string | null | undefined): string {
-  return (value ?? '').trim();
-}
-
-function matchesAnyText(value: string | null | undefined, candidates: readonly string[]): boolean {
-  const text = normalizedText(value);
-  return candidates.some((candidate) => text === candidate);
-}
+// Two distinct layouts were captured (see spike notes): a narrow/compact layout with a hamburger
+// "Menu" button (`jsaction` handler `settings.open`) that must be opened before a "Saved" menu
+// item becomes reachable, and a wider "navigation rail" layout where a persistent left sidebar
+// already has its own menu-ish "more" button (`jsaction` handler `navigationrail.more`) *and* a
+// directly clickable "Saved" entry (`jsaction` handler `navigationrail.saved`) with no menu to
+// open at all. `isMenuButton` recognizes either layout's menu-ish button; `isSavedTrigger`
+// recognizes either layout's "open my saved lists" control, whether or not it currently needs a
+// menu opened first to be reachable — see entrypoints/gmaps.content.ts for the try-direct-first,
+// fall-back-to-menu orchestration this enables.
 
 // locale: "Menu" (en) / "メニュー" (ja, unconfirmed) — jsaction handler is the primary, locale-free anchor.
 const MENU_LABELS = ['Menu', 'メニュー'] as const;
 
 export function isMenuButton(el: Element): boolean {
   if (hasJsactionHandler(el, 'settings.open')) return true;
+  if (hasJsactionHandler(el, 'navigationrail.more')) return true;
   return matchesAnyText(el.getAttribute('aria-label'), MENU_LABELS);
 }
 
 // locale: "Saved" (en) / "保存済み" (ja) — jsaction handler is the primary, locale-free anchor.
-const SAVED_MENU_ITEM_LABELS = ['Saved', '保存済み'] as const;
+const SAVED_TRIGGER_LABELS = ['Saved', '保存済み'] as const;
 
-export function isSavedMenuItem(el: Element): boolean {
+export function isSavedTrigger(el: Element): boolean {
   if (hasJsactionHandler(el, 'settings.yourplaces')) return true;
-  return matchesAnyText(el.textContent, SAVED_MENU_ITEM_LABELS);
+  if (hasJsactionHandler(el, 'navigationrail.saved')) return true;
+  return matchesAnyText(el.textContent, SAVED_TRIGGER_LABELS);
 }
 
 // locale: "New list" (en) / "新しいリスト" (ja, unconfirmed). `data-value="New list"` looked like an

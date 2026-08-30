@@ -4,10 +4,13 @@
 // this pane and then calls into this module. See ADR-0008 and the (sanitized) spike notes doc for
 // the DOM shape this assumes.
 
+import { isAddPlaceButton } from './add-place-search';
 import { isListMetaLine, isNewListButton } from './google-maps-detectors';
+import { normalizedText } from './dom-helpers';
 
 export type SavedListEntry = {
   readonly name: string;
+  readonly element: Element;
 };
 
 // The pane observed in the wild is `[role="main"]` and contains both a tablist (Lists / Labeled /
@@ -55,7 +58,7 @@ export function parseSavedListEntries(paneRoot: ParentNode): SavedListEntry[] {
 
     const name = (leaves[metaIndex - 1].textContent ?? '').trim();
     if (name.length > 0) {
-      entries.push({ name });
+      entries.push({ name, element: button });
     }
   }
 
@@ -65,4 +68,39 @@ export function parseSavedListEntries(paneRoot: ParentNode): SavedListEntry[] {
 export function hasListNamed(paneRoot: ParentNode, name: string): boolean {
   const target = name.trim();
   return parseSavedListEntries(paneRoot).some((entry) => entry.name === target);
+}
+
+// The clickable row for a given list name, to open its own detail pane (see
+// `findListDetailPaneRoot` below) — e.g. to then search for and add places to it.
+export function findListButtonByName(paneRoot: ParentNode, name: string): Element | null {
+  const target = name.trim();
+  return parseSavedListEntries(paneRoot).find((entry) => entry.name === target)?.element ?? null;
+}
+
+// A single list's own detail pane (opened by clicking its row in the overview pane above) — also
+// `[role="main"]`, but with no tablist (that's what distinguishes it from the overview pane) and,
+// instead, a title button carrying the list's own name as its `aria-label` (the same "title
+// button" shape the rename step's "Untitled list" trigger uses — see
+// google-maps-detectors.ts's `isUntitledListPlaceholder` — just with the real name once renamed)
+// plus an "Add a place" toggle (add-place-search.ts's `isAddPlaceButton`).
+export function findListDetailPaneRoot(root: ParentNode): Element | null {
+  const candidates = root.querySelectorAll('[role="main"]');
+  for (const candidate of candidates) {
+    if (candidate.querySelector('[role="tablist"]') !== null) continue;
+    const hasTitleButton = candidate.querySelector('h1 button[aria-label]') !== null;
+    const hasAddPlaceButton = [...candidate.querySelectorAll('button')].some(isAddPlaceButton);
+    if (hasTitleButton && hasAddPlaceButton) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+export function detailPaneTitle(paneRoot: Element): string | null {
+  const titleButton = paneRoot.querySelector('h1 button[aria-label]');
+  return titleButton ? normalizedText(titleButton.getAttribute('aria-label')) : null;
+}
+
+export function isListDetailPaneFor(paneRoot: Element, name: string): boolean {
+  return detailPaneTitle(paneRoot) === name.trim();
 }

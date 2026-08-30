@@ -83,4 +83,21 @@ describe('validateSessionRoot', () => {
     expect(error).toBeInstanceOf(ExtractionError);
     expect((error as ExtractionError).code).toBe('SessionCorrupt');
   });
+
+  it('accepts a valid importSummary', () => {
+    const root = { ...validRoot, importSummary: { addedCount: 3, skippedCount: 1, failedCount: 0 } };
+    expect(validateSessionRoot(root)).toEqual(root);
+  });
+
+  it('throws SessionCorrupt when importSummary has a non-numeric field', () => {
+    const error = captureError(() =>
+      validateSessionRoot({
+        ...validRoot,
+        importSummary: { addedCount: '3', skippedCount: 1, failedCount: 0 },
+      }),
+    );
+
+    expect(error).toBeInstanceOf(ExtractionError);
+    expect((error as ExtractionError).code).toBe('SessionCorrupt');
+  });
 });

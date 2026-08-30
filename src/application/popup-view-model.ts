@@ -7,7 +7,12 @@ export type ScreenViewModel =
   | { readonly screen: 'extract_complete'; readonly shopCount?: number; readonly collectionCount?: number }
   | { readonly screen: 'confirm'; readonly shopCount?: number; readonly collectionCount?: number }
   | { readonly screen: 'import_starting' }
-  | { readonly screen: 'import_succeeded' }
+  | {
+      readonly screen: 'import_succeeded';
+      readonly addedCount?: number;
+      readonly skippedCount?: number;
+      readonly failedCount?: number;
+    }
   | {
       readonly screen: 'error';
       readonly code: string;
@@ -42,7 +47,12 @@ export function buildScreenViewModel(snapshot: UiStateSnapshot): ScreenViewModel
     case 'import_starting':
       return { screen: 'import_starting' };
     case 'import_succeeded':
-      return { screen: 'import_succeeded' };
+      return {
+        screen: 'import_succeeded',
+        addedCount: snapshot.addedCount,
+        skippedCount: snapshot.skippedCount,
+        failedCount: snapshot.failedCount,
+      };
     case 'error':
       return {
         screen: 'error',
