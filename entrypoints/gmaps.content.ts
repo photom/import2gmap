@@ -453,13 +453,13 @@ async function handleAddShop(
       const rows = parseSuggestionRows(document);
       return rows.length > 0 ? rows : null;
     }, SUGGESTIONS_TIMEOUT_MS);
-    if (!suggestions) {
+    const topSuggestion = suggestions?.[0];
+    if (!suggestions || !topSuggestion) {
       logStep(jobId, 'suggestions:missing');
       return failAddShop(jobId, 'GoogleMapsUiChanged');
     }
     logStep(jobId, 'suggestions:found', `count=${suggestions.length}`);
 
-    const topSuggestion = suggestions[0];
     (topSuggestion.element as HTMLElement).click();
     logStep(jobId, 'suggestion:clicked');
 
