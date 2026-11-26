@@ -1,6 +1,7 @@
 import { SessionStorageManager } from '@/src/infrastructure/storage/session-storage-manager';
 import { detectTabContext } from '@/src/application/tab-context-detector';
 import { route, routePermissionGranted } from '@/src/application/message-router';
+import { isContentScriptSender, isExtensionPageSender } from '@/src/application/message-sender';
 import type { RouteDeps, RouteResult } from '@/src/application/message-router';
 import { isGoogleMapsDiagnosticMessage, isPopupToWorkerMessage } from '@/src/domain/messaging/message-types';
 import type {
@@ -53,8 +54,8 @@ function logStep(jobId: JobId, step: string, detail?: string): void {
 export default defineBackground(() => {
   const sessionManager = new SessionStorageManager();
 
-  browser.runtime.onMessage.addListener((rawMessage, _sender, sendResponse) => {
-    if (!isPopupToWorkerMessage(rawMessage)) {
+  browser.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
+    if (!isExtensionPageSender(sender, browser.runtime.id) || !isPopupToWorkerMessage(rawMessage)) {
       return undefined;
     }
     void handlePopupMessage(rawMessage, sendResponse);
@@ -64,8 +65,8 @@ export default defineBackground(() => {
   // Streamed live from entrypoints/gmaps.content.ts's `logStep`, independent of whether the final
   // GMAPS_ENSURE_LIST_RESULT reply ever arrives — see that file's comment. Fire-and-forget: no
   // sendResponse, no `return true`.
-  browser.runtime.onMessage.addListener((rawMessage) => {
-    if (!isGoogleMapsDiagnosticMessage(rawMessage)) {
+  browser.runtime.onMessage.addListener((rawMessage, sender) => {
+    if (!isContentScriptSender(sender, browser.runtime.id) || !isGoogleMapsDiagnosticMessage(rawMessage)) {
       return undefined;
     }
     console.log(rawMessage.line);
