@@ -56,7 +56,7 @@ export function parseSavedListEntries(paneRoot: ParentNode): SavedListEntry[] {
     const metaIndex = leaves.findIndex((el) => isListMetaLine(el.textContent));
     if (metaIndex <= 0) continue; // no recognizable metadata line, or nothing before it to be the name
 
-    const name = (leaves[metaIndex - 1].textContent ?? '').trim();
+    const name = (leaves[metaIndex - 1]?.textContent ?? '').trim();
     if (name.length > 0) {
       entries.push({ name, element: button });
     }
