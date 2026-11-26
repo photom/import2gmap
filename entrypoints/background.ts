@@ -532,8 +532,7 @@ export default defineBackground(() => {
       let addedCount = 0;
       let skippedCount = 0;
       let failedCount = 0;
-      for (let i = 0; i < shops.length; i++) {
-        const shop = shops[i];
+      for (const [i, shop] of shops.entries()) {
         const shopResult = await sendAddShopWithRetry(tabId, jobId, TARGET_SAVED_LIST_NAME, shop.name, shop.address);
         if (shopResult?.diagnostics) {
           for (const line of shopResult.diagnostics) {
