@@ -3,13 +3,20 @@ import { detectTabContext } from '@/src/application/tab-context-detector';
 import { route, routePermissionGranted } from '@/src/application/message-router';
 import { isContentScriptSender, isExtensionPageSender } from '@/src/application/message-sender';
 import type { RouteDeps, RouteResult } from '@/src/application/message-router';
-import { isGoogleMapsDiagnosticMessage, isPopupToWorkerMessage } from '@/src/domain/messaging/message-types';
+import {
+  isContentToWorkerMessage,
+  isGoogleMapsAddShopResultMessage,
+  isGoogleMapsDiagnosticMessage,
+  isGoogleMapsToWorkerMessage,
+  isPopupToWorkerMessage,
+} from '@/src/domain/messaging/message-types';
 import type {
   ContentToWorkerMessage,
   GoogleMapsAddShopResultMessage,
   GoogleMapsToWorkerMessage,
   JobId,
   PopupToWorkerMessage,
+  WorkerToContentMessage,
   WorkerToPopupMessage,
 } from '@/src/domain/messaging/message-types';
 import type { CollectionRef } from '@/src/domain/models/extracted-shop';
@@ -140,8 +147,14 @@ export default defineBackground(() => {
     return tab;
   }
 
-  async function sendToTab(tabId: number, message: unknown): Promise<ContentToWorkerMessage | undefined> {
-    return browser.tabs.sendMessage(tabId, message);
+  // Replies come from a content script running on a third-party page: anything malformed, or
+  // answering a different job, is treated as no reply (security review round 1, F3).
+  async function sendToTab(
+    tabId: number,
+    message: WorkerToContentMessage,
+  ): Promise<ContentToWorkerMessage | undefined> {
+    const reply: unknown = await browser.tabs.sendMessage(tabId, message);
+    return isContentToWorkerMessage(reply) && reply.jobId === message.jobId ? reply : undefined;
   }
 
   function broadcastToPopup(message: WorkerToPopupMessage): void {
@@ -271,12 +284,12 @@ export default defineBackground(() => {
           return;
         }
 
-        for (const shop of pageResult.shops as StoredShop[]) {
+        for (const shop of pageResult.shops) {
           if (seenUrls.has(shop.url)) continue;
           seenUrls.add(shop.url);
           shops.push(shop);
         }
-        for (const ref of pageResult.catalogDelta as CollectionRef[]) {
+        for (const ref of pageResult.catalogDelta) {
           catalogById.set(ref.id, ref);
         }
         if (pageResult.pageMeta?.totalShopsDeclared !== undefined) {
@@ -362,10 +375,17 @@ export default defineBackground(() => {
   // retry loop below acts on. tabs.sendMessage can otherwise hang indefinitely with zero
   // diagnostic output if the target frame's listener died between injection and send (e.g. a
   // navigation tore it down) — this bounds that.
-  async function sendGmapsMessageOnce<T>(tabId: number, message: unknown, timeoutMs: number): Promise<T | undefined> {
+  // A reply that fails `isValidReply`, or answers a different job, counts as no reply too (F3).
+  async function sendGmapsMessageOnce<T extends { readonly jobId: JobId }>(
+    tabId: number,
+    message: { readonly jobId: JobId },
+    isValidReply: (value: unknown) => value is T,
+    timeoutMs: number,
+  ): Promise<T | undefined> {
     const sendPromise = (async (): Promise<T | undefined> => {
       try {
-        return (await browser.tabs.sendMessage(tabId, message)) as T | undefined;
+        const reply: unknown = await browser.tabs.sendMessage(tabId, message);
+        return isValidReply(reply) && reply.jobId === message.jobId ? reply : undefined;
       } catch {
         return undefined;
       }
@@ -388,7 +408,7 @@ export default defineBackground(() => {
         await ensureContentScript(tabId, GMAPS_CONTENT_SCRIPT);
       }
       logStep(jobId, 'GMAPS_ENSURE_LIST:send', `attempt=${attempt}`);
-      const reply = await sendGmapsMessageOnce<GoogleMapsToWorkerMessage>(tabId, message, GMAPS_ATTEMPT_TIMEOUT_MS);
+      const reply = await sendGmapsMessageOnce(tabId, message, isGoogleMapsToWorkerMessage, GMAPS_ATTEMPT_TIMEOUT_MS);
       if (reply) return reply;
       logStep(jobId, 'GMAPS_ENSURE_LIST:no_reply', `attempt=${attempt}`);
     }
@@ -410,9 +430,10 @@ export default defineBackground(() => {
         logStep(jobId, 'GMAPS_ADD_SHOP:retry', `attempt=${attempt}`);
         await ensureContentScript(tabId, GMAPS_CONTENT_SCRIPT);
       }
-      const reply = await sendGmapsMessageOnce<GoogleMapsAddShopResultMessage>(
+      const reply = await sendGmapsMessageOnce(
         tabId,
         message,
+        isGoogleMapsAddShopResultMessage,
         GMAPS_ATTEMPT_TIMEOUT_MS,
       );
       if (reply) return reply;
