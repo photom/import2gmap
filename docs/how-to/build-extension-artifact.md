@@ -51,7 +51,7 @@ output/chrome-mv3/assets/popup-*.css
 output/chrome-mv3/icon/{16,32,48,96,128}.png
 ```
 
-`manifest.json`'s `name` / `description` / `permissions` / `optional_host_permissions` / `version` all come from `wxt.config.ts`'s `manifest` block (see [wxt-entrypoints-and-directory-structure](../reference/wxt-entrypoints-and-directory-structure.md)) — `version` is set explicitly there (`0.1.0` as of this writing) rather than derived from `package.json`. `package.json`'s own `version` is kept in sync by hand and is used only for the `npm run zip` output filename (see below); bump both together when cutting a new build.
+`manifest.json`'s `name` / `description` / `permissions` / `optional_host_permissions` / `version` all come from `wxt.config.ts`'s `manifest` block (see [wxt-entrypoints-and-directory-structure](../reference/wxt-entrypoints-and-directory-structure.md)) — `version` is set explicitly there (`0.1.1` as of this writing) rather than derived from `package.json`. `package.json`'s own `version` is kept in sync by hand and is used only for the `npm run zip` output filename (see below); bump both together when cutting a new build.
 
 ## 5. Load the unpacked build in Chrome
 
@@ -66,7 +66,7 @@ output/chrome-mv3/icon/{16,32,48,96,128}.png
 npm run zip
 ```
 
-Runs a production build, then zips it to `output/<package.json name>-<version>-<browser>.zip` (e.g. `output/wxt-react-starter-0.1.0-chrome.zip`). This is a manual-distribution artifact only — Chrome Web Store submission is explicitly deferred (see [decision checklist](../explanation/chrome-extension-decision-checklist.md)); there is no publish step in this repo.
+Runs a production build, then zips it to `output/<package.json name>-<version>-<browser>.zip` (e.g. `output/wxt-react-starter-0.1.1-chrome.zip`). This is a manual-distribution artifact only — Chrome Web Store submission is explicitly deferred (see [decision checklist](../explanation/chrome-extension-decision-checklist.md)); there is no publish step in this repo.
 
 ## Firefox variants
 

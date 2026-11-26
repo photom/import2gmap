@@ -7,7 +7,7 @@ export default defineConfig({
   outDir: 'output',
   modules: ['@wxt-dev/module-react'],
   manifest: {
-    version: '0.1.0',
+    version: '0.1.1',
     name: 'tabelog2gmap',
     description: '食べログの保存リストをGoogleマップの保存リストへ自動インポートするChrome拡張機能',
     permissions: ['storage', 'activeTab', 'scripting'],
