@@ -37,7 +37,14 @@ const DANGEROUS_PATTERNS: RegExp[] = [
 ];
 
 function stripHtmlTags(text: string): string {
-  return text.replace(/<[^>]*>/g, '');
+  // Removing a tag can join fragments into a new tag (e.g. "<scr<script>ipt>"),
+  // so repeat until nothing changes, then drop any stray angle brackets.
+  let previous: string;
+  do {
+    previous = text;
+    text = text.replace(/<[^>]*>/g, '');
+  } while (text !== previous);
+  return text.replace(/[<>]/g, '');
 }
 
 function decodeHtmlEntitiesOnce(text: string): string {
@@ -52,7 +59,12 @@ function decodeHtmlEntitiesOnce(text: string): string {
 }
 
 function stripDangerousSubstrings(text: string): string {
-  return DANGEROUS_PATTERNS.reduce((acc, pattern) => acc.replace(pattern, ''), text);
+  let previous: string;
+  do {
+    previous = text;
+    text = DANGEROUS_PATTERNS.reduce((acc, pattern) => acc.replace(pattern, ''), text);
+  } while (text !== previous);
+  return text;
 }
 
 function stripControlChars(text: string): string {
