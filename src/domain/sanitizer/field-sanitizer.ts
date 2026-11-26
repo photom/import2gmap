@@ -13,7 +13,7 @@ const NAMED_ENTITIES: Record<string, string> = {
   gt: '>',
   quot: '"',
   apos: "'",
-  nbsp: ' ',
+  nbsp: ' ',
 };
 
 const DANGEROUS_PATTERNS: RegExp[] = [
