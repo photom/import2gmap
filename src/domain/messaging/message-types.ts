@@ -1,3 +1,4 @@
+import type { CollectionRef, ExtractedShop } from '../models/extracted-shop';
 import type { UiStep } from '../models/session';
 
 export type ProtocolVersion = 1;
@@ -52,6 +53,34 @@ function hasProtocolVersion1(value: Record<string, unknown>): boolean {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
+}
+
+// Content-script replies carry page-derived data (security review round 1, F3): validate every
+// field the worker reads, not just the envelope.
+function isCollectionRef(value: unknown): value is CollectionRef {
+  return isRecord(value) && typeof value.id === 'string' && typeof value.name === 'string';
+}
+
+function isExtractedShop(value: unknown): value is ExtractedShop {
+  return (
+    isRecord(value) &&
+    typeof value.name === 'string' &&
+    typeof value.url === 'string' &&
+    typeof value.address === 'string' &&
+    typeof value.description === 'string' &&
+    Array.isArray(value.collections) &&
+    value.collections.every(isCollectionRef)
+  );
+}
+
+function isOptionalPageMeta(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (!isRecord(value)) return false;
+  return value.totalShopsDeclared === undefined || typeof value.totalShopsDeclared === 'number';
+}
+
+function isOptionalStringArray(value: unknown): boolean {
+  return value === undefined || (Array.isArray(value) && value.every((line) => typeof line === 'string'));
 }
 
 export function isPopupToWorkerMessage(value: unknown): value is PopupToWorkerMessage {
@@ -109,8 +138,8 @@ export type ContentToWorkerMessage =
       readonly type: 'TAB_PAGE_RESULT';
       readonly protocolVersion: ProtocolVersion;
       readonly jobId: JobId;
-      readonly shops: readonly unknown[];
-      readonly catalogDelta: readonly unknown[];
+      readonly shops: readonly ExtractedShop[];
+      readonly catalogDelta: readonly CollectionRef[];
       readonly pageMeta?: { readonly currentPage?: number; readonly totalShopsDeclared?: number };
     }
   | {
@@ -142,7 +171,13 @@ export function isContentToWorkerMessage(value: unknown): value is ContentToWork
   }
   switch (value.type) {
     case 'TAB_PAGE_RESULT':
-      return Array.isArray(value.shops) && Array.isArray(value.catalogDelta);
+      return (
+        Array.isArray(value.shops) &&
+        value.shops.every(isExtractedShop) &&
+        Array.isArray(value.catalogDelta) &&
+        value.catalogDelta.every(isCollectionRef) &&
+        isOptionalPageMeta(value.pageMeta)
+      );
     case 'TAB_FIRST_PAGE_RESULT':
       return value.kind === 'already_first' || value.kind === 'navigating';
     case 'TAB_NEXT_RESULT':
@@ -218,7 +253,9 @@ export function isGoogleMapsToWorkerMessage(value: unknown): value is GoogleMaps
   if (!isRecord(value) || !hasProtocolVersion1(value) || !isNonEmptyString(value.jobId)) {
     return false;
   }
-  return value.type === 'GMAPS_ENSURE_LIST_RESULT' && isGoogleMapsOutcome(value);
+  return (
+    value.type === 'GMAPS_ENSURE_LIST_RESULT' && isGoogleMapsOutcome(value) && isOptionalStringArray(value.diagnostics)
+  );
 }
 
 // ADR-0008 step 2 (per-shop search + add) — see entrypoints/gmaps.content.ts's `handleAddShop`.
@@ -269,7 +306,11 @@ export function isGoogleMapsAddShopResultMessage(value: unknown): value is Googl
   if (!isRecord(value) || !hasProtocolVersion1(value) || !isNonEmptyString(value.jobId)) {
     return false;
   }
-  return value.type === 'GMAPS_ADD_SHOP_RESULT' && isGoogleMapsAddShopOutcome(value);
+  return (
+    value.type === 'GMAPS_ADD_SHOP_RESULT' &&
+    isGoogleMapsAddShopOutcome(value) &&
+    isOptionalStringArray(value.diagnostics)
+  );
 }
 
 export type UiStateSnapshot = {

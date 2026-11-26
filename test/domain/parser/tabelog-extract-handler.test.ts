@@ -4,6 +4,7 @@ import {
   handleTabExtractPage,
   handleTabGoToFirstPage,
 } from '../../../src/domain/parser/tabelog-extract-handler';
+import { isContentToWorkerMessage } from '../../../src/domain/messaging/message-types';
 import { loadFixtureDocument } from '../../helpers/load-fixture-document';
 
 describe('handleTabExtractPage', () => {
@@ -16,6 +17,12 @@ describe('handleTabExtractPage', () => {
     if (result.type !== 'TAB_PAGE_RESULT') throw new Error('unreachable');
     expect(result.jobId).toBe('job-1');
     expect(result.shops.length).toBeGreaterThan(0);
+  });
+
+  it('produces a TAB_PAGE_RESULT that passes the worker-side reply validation (F3)', () => {
+    const doc = loadFixtureDocument('saved-list-single-page.html');
+
+    expect(isContentToWorkerMessage(handleTabExtractPage(doc, 'job-1'))).toBe(true);
   });
 
   it('returns TAB_EXTRACT_FAILED with NotSavedListPage for a non-saved-list page', () => {
