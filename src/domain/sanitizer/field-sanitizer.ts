@@ -13,7 +13,7 @@ const NAMED_ENTITIES: Record<string, string> = {
   gt: '>',
   quot: '"',
   apos: "'",
-  nbsp: ' ',
+  nbsp: ' ',
 };
 
 const DANGEROUS_PATTERNS: RegExp[] = [
@@ -36,8 +36,20 @@ const DANGEROUS_PATTERNS: RegExp[] = [
   /url\(javascript/gi,
 ];
 
+function replaceUntilStable(text: string, replaceOnce: (input: string) => string): string {
+  let previous: string;
+  let current = text;
+  do {
+    previous = current;
+    current = replaceOnce(current);
+  } while (current !== previous);
+  return current;
+}
+
 function stripHtmlTags(text: string): string {
-  return text.replace(/<[^>]*>/g, '');
+  // Removing a tag can join fragments into a new tag (e.g. "<scr<script>ipt>"),
+  // so repeat until nothing changes, then drop any stray angle brackets.
+  return replaceUntilStable(text, (input) => input.replace(/<[^>]*>/g, '')).replace(/[<>]/g, '');
 }
 
 function decodeHtmlEntitiesOnce(text: string): string {
@@ -52,7 +64,9 @@ function decodeHtmlEntitiesOnce(text: string): string {
 }
 
 function stripDangerousSubstrings(text: string): string {
-  return DANGEROUS_PATTERNS.reduce((acc, pattern) => acc.replace(pattern, ''), text);
+  return replaceUntilStable(text, (input) =>
+    DANGEROUS_PATTERNS.reduce((acc, pattern) => acc.replace(pattern, ''), input),
+  );
 }
 
 function stripControlChars(text: string): string {
