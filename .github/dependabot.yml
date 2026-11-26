@@ -1,0 +1,8 @@
+# Keeps the commit-SHA-pinned actions in .github/workflows/ up to date (security review round 2,
+# F6). npm security updates are already enabled in the repository settings.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
