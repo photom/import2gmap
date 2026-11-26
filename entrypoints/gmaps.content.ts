@@ -319,7 +319,7 @@ async function createList(jobId: JobId, listName: string): Promise<GoogleMapsToW
   // Re-check right before clicking Done — if something reset the field between text_set and here
   // (an auto-save/re-render cycle, a stray blur), re-apply rather than click Done on a stale value.
   if (renameInput.isConnected && renameInput.value !== listName) {
-    logStep(jobId, 'rename_input:value_reset_before_done', `value="${renameInput.value}"`);
+    logStep(jobId, 'rename_input:value_reset_before_done', `length=${renameInput.value.length}`);
     setEditableText(renameInput, listName);
   }
   doneButton.click();
