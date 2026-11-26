@@ -427,3 +427,76 @@ describe('isGoogleMapsAddShopResultMessage', () => {
     expect(isGoogleMapsAddShopResultMessage({ type: 'NOT_REAL', protocolVersion: 1, jobId: 'job-1' })).toBe(false);
   });
 });
+
+// Security review round 1, F3: replies from content scripts carry page-derived data, so the worker
+// validates their full shape before using them.
+describe('reply validation from content scripts (F3)', () => {
+  const validShop = {
+    name: '店名',
+    url: 'https://tabelog.com/tokyo/A1301/A130101/13000001/',
+    address: '東京都千代田区1-1',
+    description: 'https://tabelog.com/tokyo/A1301/A130101/13000001/',
+    collections: [{ id: '1', name: 'ラーメン' }],
+  };
+  const pageResult = (overrides: Record<string, unknown>) => ({
+    type: 'TAB_PAGE_RESULT',
+    protocolVersion: 1,
+    jobId: 'job-1',
+    shops: [validShop],
+    catalogDelta: [{ id: '1', name: 'ラーメン' }],
+    ...overrides,
+  });
+
+  it('accepts TAB_PAGE_RESULT with well-formed shops, catalog entries, and pageMeta', () => {
+    expect(isContentToWorkerMessage(pageResult({ pageMeta: { totalShopsDeclared: 1 } }))).toBe(true);
+  });
+
+  it('rejects TAB_PAGE_RESULT when a shop is missing its url', () => {
+    const { url: _url, ...shopWithoutUrl } = validShop;
+    expect(isContentToWorkerMessage(pageResult({ shops: [shopWithoutUrl] }))).toBe(false);
+  });
+
+  it('rejects TAB_PAGE_RESULT when a shop name is not a string', () => {
+    expect(isContentToWorkerMessage(pageResult({ shops: [{ ...validShop, name: 42 }] }))).toBe(false);
+  });
+
+  it('rejects TAB_PAGE_RESULT when a shop collection entry is malformed', () => {
+    expect(isContentToWorkerMessage(pageResult({ shops: [{ ...validShop, collections: [{ id: 1 }] }] }))).toBe(
+      false,
+    );
+  });
+
+  it('rejects TAB_PAGE_RESULT when a catalog entry is missing its id', () => {
+    expect(isContentToWorkerMessage(pageResult({ catalogDelta: [{ name: 'ラーメン' }] }))).toBe(false);
+  });
+
+  it('rejects TAB_PAGE_RESULT when pageMeta.totalShopsDeclared is not a number', () => {
+    expect(isContentToWorkerMessage(pageResult({ pageMeta: { totalShopsDeclared: '1' } }))).toBe(false);
+  });
+
+  it('rejects GMAPS_ENSURE_LIST_RESULT whose diagnostics is not a string array', () => {
+    expect(
+      isGoogleMapsToWorkerMessage({
+        type: 'GMAPS_ENSURE_LIST_RESULT',
+        protocolVersion: 1,
+        jobId: 'job-1',
+        ok: true,
+        created: false,
+        diagnostics: [{ html: '<b>x</b>' }],
+      }),
+    ).toBe(false);
+  });
+
+  it('rejects GMAPS_ADD_SHOP_RESULT whose diagnostics is not a string array', () => {
+    expect(
+      isGoogleMapsAddShopResultMessage({
+        type: 'GMAPS_ADD_SHOP_RESULT',
+        protocolVersion: 1,
+        jobId: 'job-1',
+        ok: true,
+        status: 'added',
+        diagnostics: 'step=x',
+      }),
+    ).toBe(false);
+  });
+});
